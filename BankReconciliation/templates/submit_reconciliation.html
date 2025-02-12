@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    Submit Reconciliation
+{% endblock %}
+
+{% block page_title %}
+    <div data-page-title>Submit Reconciliation</div>
+{% endblock %}
+
+{% block content %}
+    <div class="card">
+       <div class="card-header">
+           Upload Files
+       </div>
+
+        <div class="card-body">
+            <form id="uploadForm">
+                <table class="file-upload-table">
+                    <thead>
+                        <tr>
+                            <th>#</th> <!-- Row number column -->
+                            <th>Selected File</th>
+                            <th style="float: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileInputs">
+                        <tr>
+                            <td>
+                                <div>1</div>
+                            </td>
+                            <!-- File Input Field in its own td -->
+                            <td>
+                                <div class="file-input">
+                                    <input style="display: block; width:100%;" id="file-upload" type="file" name="files">
+                                </div>
+                            </td>
+
+                             <td>
+                                <div class="file-input"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <table class="file-upload-table">
+                    <thead></thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <button class="btn-outline-custom" style="margin-left: 4%;" type="button" onclick="addFileField()">Add File</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center;">
+                                <div class="button-container">
+                                    <button class="btn-outline-custom" type="button" onclick="uploadFiles()">Upload File(s)</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+       <div class="card-header">
+           Uploaded Files
+       </div>
+
+        <div class="card-body">
+            <table id="uploadedFilesTable" class="file-upload-table">
+                <thead>
+                    <tr>
+                        <th>#</th> <!-- Row number column -->
+                        <th>File Name</th>
+                        <th style="float: right;">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="uploadedFilesBody"></tbody>
+            </table>
+            <table class="file-upload-table">
+                    <thead></thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: center;">
+                                <div class="button-container">
+                                    <button class="btn-outline-custom" type="button" onclick="">Submit Request</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+        </div>
+    </div>
+
+    <script>
+        function addFileField() {
+            let rowCount = $("#fileInputs tr").length + 1; // Get new row number
+
+            $("#fileInputs").append(`
+                <tr>
+                    <td>${rowCount}</td> <!-- Number column -->
+                    <td>
+                        <div class="file-input">
+                            <input type="file" name="files">
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn-outline-custom" style="float: right;" type="button" class="remove-btn" onclick="removeField(this)">Remove File</button>
+                    </td>
+                </tr>
+            `);
+            updateRowNumbers("#fileInputs"); // Update row numbers after adding
+        }
+
+
+        function removeField(button) {
+            $(button).closest("tr").remove();
+            updateRowNumbers("#fileInputs"); // Update row numbers after removal
+        }
+
+
+        function uploadFiles() {
+            let formData = new FormData($("#uploadForm")[0]);
+
+            $.ajax({
+                url: "/upload",
+                type: "POST",
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function(response) {
+                    alert(response.message);
+                    displayUploadedFiles(response.files);
+
+                    // Reset the form to its initial state
+                    $("#uploadForm")[0].reset();
+
+                    // Remove all dynamically added file input fields except the first one
+                    $("#fileInputs").html(`
+                        <tr>
+                            <td>
+                                <div>1</div>
+                            </td>
+                            <td>
+                                <div class="file-input">
+                                    <input type="file" name="files">
+                                </div>
+                            </td>
+                            <td>
+
+                            </td>
+                        </tr>
+                    `);
+                },
+                error: function(error) {
+                    alert(error.responseJSON.error);
+                }
+            });
+        }
+
+        function displayUploadedFiles(files) {
+            let uploadedFilesBody = $("#uploadedFilesBody");
+            uploadedFilesBody.empty(); // Clear existing rows
+
+            files.forEach((file, index) => {
+                let row = $(`
+                    <tr>
+                        <td>${index + 1}</td> <!-- Number column -->
+                        <td>${file}</td>
+                        <td>
+                            <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file}', this)">Delete File</button>
+                        </td>
+                    </tr>
+                `);
+                uploadedFilesBody.append(row);
+            });
+        }
+
+
+        function deleteFile(filename, button) {
+            $.ajax({
+                url: "/delete-file",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ filename: filename }),
+                success: function(response) {
+                    alert(response.message);
+                    $(button).closest("tr").remove(); // Remove the file row from the table
+                },
+                error: function(error) {
+                    alert(error.responseJSON.error);
+                }
+            });
+        }
+
+
+        function updateRowNumbers(tableId) {
+            $(`${tableId} tr`).each(function(index) {
+                $(this).find("td:first").text(index + 1); // Update first column with correct number
+            });
+        }
+
+    </script>
+
+{% endblock %}
