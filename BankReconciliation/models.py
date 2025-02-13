@@ -111,3 +111,72 @@ class FileUploadBatch:
             return None
         finally:
             conn.close()
+
+
+class FileUpload:
+    def __init__(self, id, batch_id, file_name):
+        self.id = id
+        self.batch_id = batch_id
+        self.file_name = file_name
+
+    @staticmethod
+    def insert_into_file_upload(batch_id, file_name):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        # Get the last batch_id
+        cursor.execute("SELECT MAX(id) FROM file_upload")
+        last_file_id = cursor.fetchone()[0]  # Fetch last batch_id
+
+        # Set new batch_id
+        new_file_id = (last_file_id + 1) if last_file_id else 1
+
+        try:
+            cursor.execute(
+                "INSERT INTO file_upload (id, batch_id, file_name, removed_by_user_on_upload_page) VALUES (?, ?, ?, ?)",
+                (new_file_id, batch_id, file_name, 0),
+            )
+            conn.commit()
+            return new_file_id
+        except pyodbc.Error as e:
+            print("Database insert error:", e)
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+
+
+class FileDelete:
+    def __init__(self, filename):
+        self.filename = filename
+
+    @staticmethod
+    def remove_file_by_user_on_upload_page(file_name):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        # Check if file exists in the database
+        cursor.execute("SELECT COUNT(*) FROM file_upload WHERE file_name = ?", (file_name,))
+        file_exists = cursor.fetchone()[0]
+
+        if file_exists:
+            try:
+                # Update `removed_by_user_on_upload_page` to 1
+                cursor.execute(
+                    "UPDATE file_upload SET removed_by_user_on_upload_page = 1 WHERE file_name = ?",
+                    (file_name,)
+                )
+                conn.commit()
+                return file_name
+            except pyodbc.Error as e:
+                print("Database update error:", e)
+                conn.rollback()
+                return None
+            finally:
+                conn.close()

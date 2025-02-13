@@ -19,100 +19,101 @@
       <script>
          //dynamically loading content in the content div
          $(document).ready(function() {
-            //highlight active vertical menu item
-             function setActiveNavLink() {
-                 $(".nav-link").removeClass("active"); // Remove active class from all links
-                 $(".nav-link").each(function() {
-                     if (this.href === window.location.href) {
-                         $(this).addClass("active"); // Add active class to the current link
-                     }
-                 });
-             }
 
              const dashboardUrl = "{{ url_for('dashboard_page') }}";
 
              let lastPage = sessionStorage.getItem("lastPage") || dashboardUrl;
-             loadContent(lastPage);
+
+             // Prevent dashboard from loading at login and after logging out
+             const excludedPages = ["{{ url_for('login_page') }}", "{{ url_for('logout_page') }}"];
+
+             if (!excludedPages.includes(window.location.pathname)) {
+                 $.get(dashboardUrl, function(data) {
+                     loadContent(lastPage);
+                 }).fail(function() {
+                     alert("Failed to load the dashboard content.");
+                 });
+             }
 
              function loadContent(url) {
+                 // Check if the content is already loaded
+                 if ($(".content").data("current-url") === url) {
+                     return; // Exit if content is already loaded
+                 }
+
                  $.get(url, function(data) {
-                   let newContent = $(data).find(".content").html();
-                    let newPageTitle = $(data).find("[data-page-title]").html();
-                    let newTitle = $(data).filter("title").text().trim();
+                     let newContent = $(data).find(".content").html();
+                     let newPageTitle = $(data).find("[data-page-title]").html();
+                     let newTitle = $(data).filter("title").text().trim();
 
-                    if (newContent) {
-                        $(".content").html(newContent);
-                    }
+                     if (newContent) {
+                         $(".content").html(newContent);
+                         $(".content").data("current-url", url); // Store the current URL
+                     }
 
-                    if (newPageTitle) {
-                        $("#dynamic-page-title").html(newPageTitle);
-                    }
+                     if (newPageTitle) {
+                         $("#dynamic-page-title").html(newPageTitle);
+                     }
 
-                    if (newTitle) {
-                        document.title = newTitle;
-                    } else {
-                        document.title = "Bank Reconciliation Tracker"; // Default title
-                    }
-
-                     // Save current page in sessionStorage
+                     if (newTitle) {
+                         document.title = newTitle;
+                     } else {
+                         document.title = "Bank Reconciliation Tracker"; // Default title
+                     }
 
                      sessionStorage.setItem("lastPage", url);
 
-                     // Update active menu highlighting
                      setActiveNavLink();
-
                  }).fail(function() {
                      alert("Error loading page.");
                  });
              }
 
-             // Intercept navigation clicks
-             $("a.nav-link").on("click", function(e) {
+             $("a.nav-link").off("click").on("click", function(e) {
                  const url = $(this).attr("href");
 
-                 // Allow full refresh for login and logout pages
                  if (url === "{{ url_for('login_page') }}" || url === "{{ url_for('logout_page') }}") {
-                     sessionStorage.removeItem("lastPage"); //clearing the lastPage to enable display of dashboard on successful login
-                     return; // Skip custom handling for these links
+                     sessionStorage.removeItem("lastPage");
+                     return;
                  }
 
                  e.preventDefault();
 
-                 // Load content into the content div
                  loadContent(url);
 
-                 // Update browser history.
                  history.pushState(null, null, url);
              });
 
-             // Handle back/forward button navigation
              window.onpopstate = function() {
-                 $.get(location.href, function(data) {
-                     loadContent(location.href);
-                 });
+                 loadContent(location.href);
              };
 
-             $(".menu-collapse-heading").on("click", function(e) {
+             $(".menu-collapse-heading").off("click").on("click", function(e) {
                  const url = $(this).attr("href");
 
-                 // Check if the clicked link is the Dashboard
                  if (url === "{{ url_for('dashboard_page') }}") {
-                     e.preventDefault(); // Prevent default link behavior
+                     e.preventDefault();
 
-                     // Collapse any expanded accordion panels
+                     if ($(".content").data("current-url") === url) {
+                         return;
+                     }
+
                      $("#accordion .panel-collapse.show").collapse("hide");
 
-                     // Load the dashboard content dynamically
-                     $.get(url, function(data) {
-                         $(".content").html($(data).find(".content").html());
-                     }).fail(function() {
-                         alert("Failed to load dashboard content.");
-                     });
+                     loadContent(url);
 
-                     // Update the browser history state
                      history.pushState(null, null, url);
                  }
              });
+
+             function setActiveNavLink() {
+                 $(".nav-link").removeClass("active");
+                 $(".nav-link").each(function() {
+                     if (this.href === window.location.href) {
+                         $(this).addClass("active");
+                     }
+                 });
+             }
          });
 
          // Dynamically change direction of caret icon
@@ -141,7 +142,7 @@
                {% if current_user.is_authenticated %}
                <ul class="navbar-nav ml-auto" style="">
                   <li class="nav-item">
-                     <a class="nav-link" href="{{ url_for('logout_page') }}">Logout</a>
+                     <a class="nav-link" href="{{ url_for('logout_page') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('logout_page') }}';">Logout</a>
                   </li>
                </ul>
                {% else %}
@@ -211,7 +212,7 @@
                </div>
                <div class="panel panel-default">
                   <div class="panel-heading">
-                     <a class="nav-link" href="{{ url_for('logout_page') }}"> <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span><i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i></a>
+                     <a class="nav-link" href="{{ url_for('logout_page') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('logout_page') }}';"> <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span><i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i></a>
                   </div>
                </div>
             </div>
