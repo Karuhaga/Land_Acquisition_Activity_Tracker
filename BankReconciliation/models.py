@@ -81,6 +81,22 @@ class FileUploadBatch:
         self.date_time = date_time
 
     @staticmethod
+    def check_batch_submission_status(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        # check if User has a request pending submission
+        cursor.execute("SELECT COUNT(submission_status) FROM file_upload_batch WHERE submission_status = ? and "
+                       "user_id = ? ", (0, user_id))
+
+        number_of_unsubmitted_requests = cursor.fetchone()[0]  # Fetch last batch_id
+        conn.close()
+        return number_of_unsubmitted_requests
+
+    @staticmethod
     def insert_into_file_upload_batch(user_id):
         conn = get_db_connection()
         if conn is None:
@@ -100,8 +116,8 @@ class FileUploadBatch:
 
         try:
             cursor.execute(
-                "INSERT INTO file_upload_batch (id, user_id, date_time) VALUES (?, ?, ?)",
-                (new_batch_id, user_id, now),
+                "INSERT INTO file_upload_batch (id, user_id, date_time, submission_status) VALUES (?, ?, ?, ?)",
+                (new_batch_id, user_id, now, 0),
             )
             conn.commit()
             return new_batch_id
@@ -136,8 +152,8 @@ class FileUpload:
 
         try:
             cursor.execute(
-                "INSERT INTO file_upload (id, batch_id, file_name, removed_by_user_on_upload_page) VALUES (?, ?, ?, ?)",
-                (new_file_id, batch_id, file_name, 0),
+                "INSERT INTO file_upload (id, batch_id, file_name, removed_by_user_on_upload_page) "
+                "VALUES (?, ?, ?, ?)",(new_file_id, batch_id, file_name, 0),
             )
             conn.commit()
             return new_file_id
@@ -146,6 +162,38 @@ class FileUpload:
             conn.rollback()
             return None
         finally:
+            conn.close()
+
+    @staticmethod
+    def get_uploaded_pending_submission_files_by_user(batch_id):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        try:
+            # Raw MSSQL Query to fetch all files that are not marked as removed
+            query = """
+                            SELECT file_name 
+                            FROM file_upload 
+                            WHERE batch_id = ?
+                            AND removed_by_user_on_upload_page = 0
+                        """
+
+            # Execute the query with user_id as parameter
+            cursor.execute(query, (batch_id,))
+            result = cursor.fetchall()
+
+            # Extract file names from result
+            files = [row.file_name for row in result]
+            return files
+        except Exception as e:
+            print("Database error:", e)
+            return None
+        finally:
+            # Close cursor and connection
+            cursor.close()
             conn.close()
 
 

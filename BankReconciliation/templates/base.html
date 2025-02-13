@@ -24,16 +24,7 @@
 
              let lastPage = sessionStorage.getItem("lastPage") || dashboardUrl;
 
-             // Prevent dashboard from loading at login and after logging out
-             const excludedPages = ["{{ url_for('login_page') }}", "{{ url_for('logout_page') }}"];
 
-             if (!excludedPages.includes(window.location.pathname)) {
-                 $.get(dashboardUrl, function(data) {
-                     loadContent(lastPage);
-                 }).fail(function() {
-                     alert("Failed to load the dashboard content.");
-                 });
-             }
 
              function loadContent(url) {
                  // Check if the content is already loaded
@@ -194,8 +185,8 @@
                   </div>
                   <div id="collapse3" class="panel-collapse collapse" data-parent="#accordion">
                      <div class="panel-body">
-                        <a class="nav-link {% if request.path == url_for('dashboard_page') %} active {% endif %}" href="{{ url_for('dashboard_page') }}"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
-                        <a class="nav-link {% if request.path == url_for('dashboard_page') %} active {% endif %}" href="{{ url_for('dashboard_page') }}"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
+                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
+                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
                      </div>
                   </div>
                </div>
@@ -205,8 +196,8 @@
                   </div>
                   <div id="collapse4" class="panel-collapse collapse" data-parent="#accordion">
                      <div class="panel-body">
-                        <a class="nav-link {% if request.path == url_for('dashboard_page') %} active {% endif %}" href="{{ url_for('dashboard_page') }}"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
-                        <a class="nav-link {% if request.path == url_for('dashboard_page') %} active {% endif %} " href="{{ url_for('dashboard_page') }}"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
+                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
+                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
                      </div>
                   </div>
                </div>

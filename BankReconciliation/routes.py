@@ -16,7 +16,7 @@ def login_page():
         attempted_user = User.get_by_username(form.username.data)
         if attempted_user and attempted_user.check_password(form.password.data):
             session.permanent = True  # Persist session
-            login_user(attempted_user, remember=True)
+            login_user(attempted_user)
             flash(f'Success! You logged in as: {attempted_user.username}', category='success')
             return redirect(url_for('dashboard_page'))
         else:
@@ -39,9 +39,22 @@ def dashboard_page():
 @app.route('/submit-reconciliation', methods=['GET', 'POST'])
 @login_required
 def submit_reconciliation_page():
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return render_template('submit_reconciliation.html')
-    return render_template('base.html', content=render_template('submit_reconciliation.html'))
+    num_of_unsubmitted_requests = FileUploadBatch.check_batch_submission_status(current_user.id)
+    #print(num_of_unsubmitted_requests)
+    if num_of_unsubmitted_requests is None:
+        return jsonify({"error": "Database error while creating batch file upload"}), 500
+
+    if num_of_unsubmitted_requests != 0:
+        batch = 1
+        uploaded_files = FileUpload.get_uploaded_pending_submission_files_by_user(batch)
+        if uploaded_files is None:
+            return jsonify({"error": "Database error while fetching uploaded files"}), 500
+    else:
+        uploaded_files = []
+
+    return render_template('submit_reconciliation.html',
+                           num_of_unsubmitted_requests=num_of_unsubmitted_requests,
+                           uploaded_files=uploaded_files)
 
 
 @app.route('/upload', methods=['POST'])
@@ -88,7 +101,7 @@ def upload_files():
 @login_required
 def delete_file():
     data = request.get_json()
-    filename = data.get('filename')
+    filename = data.get('filename').strip()
 
     if not filename:
         return jsonify({"error": "Filename not provided"}), 400
@@ -107,6 +120,18 @@ def delete_file():
         return jsonify({"message": f"File '{filename}' deleted successfully!"}), 200
     else:
         return jsonify({"error": "File not found"}), 404
+
+
+@app.route('/get-uploaded-files', methods=['GET'])
+@login_required
+def get_uploaded_files():
+    # Fetch uploaded files for the current user
+    uploaded_files = FileUpload.get_uploaded_pending_submission_files_by_user(current_user.id)
+
+    if uploaded_files is None:
+        return jsonify({"error": "Database error while fetching uploaded files"}), 500
+
+    return jsonify({"files": uploaded_files}), 200
 
 
 @app.route('/previous-submissions', methods=['GET', 'POST'])
