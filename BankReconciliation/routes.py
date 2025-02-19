@@ -40,7 +40,6 @@ def dashboard_page():
 @login_required
 def submit_reconciliation_page():
     num_of_unsubmitted_requests = FileUploadBatch.check_batch_submission_status(current_user.id)
-    #print(num_of_unsubmitted_requests)
     if num_of_unsubmitted_requests is None:
         return jsonify({"error": "Database error while creating batch file upload"}), 500
 
@@ -134,12 +133,11 @@ def get_uploaded_files():
     return jsonify({"files": uploaded_files}), 200
 
 
-@app.route('/previous-submissions', methods=['GET', 'POST'])
+@app.route('/submitted-reconciliations', methods=['GET', 'POST'])
 @login_required
-def previous_submission_page():
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return render_template('previous_submissions.html')
-    return render_template('base.html', content=render_template('previous_submissions.html'))
+def submitted_reconciliations_page():
+    reconciliations = FileUpload.get_submitted_reconciliations(current_user.id)
+    return render_template('submitted_reconciliations.html', reconciliations=reconciliations)
 
 
 @app.route('/logout')

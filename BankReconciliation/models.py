@@ -130,10 +130,11 @@ class FileUploadBatch:
 
 
 class FileUpload:
-    def __init__(self, id, batch_id, file_name):
+    def __init__(self, id, batch_id, file_name, date_time):
         self.id = id
         self.batch_id = batch_id
         self.file_name = file_name
+        self.date_time = date_time
 
     @staticmethod
     def insert_into_file_upload(batch_id, file_name):
@@ -193,6 +194,35 @@ class FileUpload:
             return None
         finally:
             # Close cursor and connection
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_submitted_reconciliations(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                SELECT b.id, b.batch_id, b.file_name, a.date_time
+                FROM file_upload_batch a 
+                LEFT OUTER JOIN file_upload b ON a.id = b.batch_id 
+                WHERE a.user_id = ?	AND b.removed_by_user_on_upload_page = 0
+            """
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            reconciliations = [FileUpload(row.id, row.batch_id, row.file_name, row.date_time) for row in result]
+            return reconciliations
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
             cursor.close()
             conn.close()
 

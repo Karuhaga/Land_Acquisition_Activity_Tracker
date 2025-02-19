@@ -16,18 +16,18 @@
 
         <div class="card-body">
             <form id="uploadForm">
-                <table class="file-upload-table">
+                <table class="table table-striped table-bordered table-hover">
                     <thead>
                         <tr>
-                            <th>#</th> <!-- Row number column -->
+                            <th style="text-align: right;">#</th> <!-- Row number column -->
                             <th>Selected File</th>
-                            <th style="float: right;">Action</th>
+                            <th style="text-align: right;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="fileInputs">
                         <tr>
                             <td>
-                                <div>1</div>
+                                <div style="text-align: right;">1</div>
                             </td>
                             <!-- File Input Field in its own td -->
                             <td>
@@ -40,18 +40,30 @@
                                 <div class="file-input"></div>
                             </td>
                         </tr>
+                    <tr>
+                            <td>
+                                <div></div>
+                            </td>
+                            <!-- File Input Field in its own td -->
+                            <td>
+
+                            </td>
+
+                            <td>
+                                <button class="btn-outline-custom" style="float: right;" type="button" onclick="addFileField()">Add File</button>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
-                <table class="file-upload-table">
+                <table class="" style="width: 100%;">
                     <thead></thead>
                     <tbody>
                         <tr>
-                            <td>
-                                <button class="btn-outline-custom" style="margin-left: 4%;" type="button" onclick="addFileField()">Add File</button>
-                            </td>
+
+
                         </tr>
                         <tr>
-                            <td style="text-align: center;">
+                            <td>
                                 <div class="button-container">
                                     <button class="btn-outline-custom" type="button" onclick="uploadFiles()">Upload File(s)</button>
                                 </div>
@@ -69,21 +81,23 @@
        </div>
 
         <div class="card-body">
-            <table id="uploadedFilesTable" class="file-upload-table">
+            <table id="uploadedFilesTable" class="table table-striped table-bordered table-hover paginated">
                 <thead>
                     <tr>
                         <th>#</th> <!-- Row number column -->
                         <th>File Name</th>
-                        <th style="float: right;">Action</th>
+                        <th style="text-align: right;">Action</th>
                     </tr>
                 </thead>
                 <tbody id="uploadedFilesBody">
                     <tr>
-                        <td colspan="3" style="text-align: center;">No files uploaded...</td>
+                        <td>1</td>
+                        <td style="text-align: center;">No files uploaded...</td>
+                        <td></td>
                     </tr>
                 </tbody>
             </table>
-            <table class="file-upload-table">
+            <table class="" style="width: 100%;">
                 <thead></thead>
                 <tbody>
                     <tr>
@@ -100,30 +114,32 @@
 
     <script>
         function addFileField() {
-            let rowCount = $("#fileInputs tr").length + 1; // Get new row number
+            const addButtonRow = $("#fileInputs tr:last"); // The "Add File" button is in the last row
+            const newRowIndex = $("#fileInputs tr").length; // Adjust the index as needed
 
-            $("#fileInputs").append(`
+            const newRow = $(`
                 <tr>
-                    <td>${rowCount}</td> <!-- Number column -->
+                    <td style="text-align: right;">${newRowIndex}</td>
                     <td>
                         <div class="file-input">
-                            <input type="file" name="files">
+                            <input type="file" name="files" style="width: 100%;">
                         </div>
                     </td>
                     <td>
-                        <button class="btn-outline-custom" style="float: right;" type="button" class="remove-btn" onclick="removeField(this)">Remove File</button>
+                        <button class="btn-outline-custom" style="float: right;" type="button" onclick="removeField(this)">Remove File</button>
                     </td>
                 </tr>
             `);
-            updateRowNumbers("#fileInputs"); // Update row numbers after adding
-        }
 
+            // Insert the new row before the "Add File" button row
+            addButtonRow.before(newRow);
+            updateRowNumbers("#fileInputs");
+        }
 
         function removeField(button) {
             $(button).closest("tr").remove();
             updateRowNumbers("#fileInputs"); // Update row numbers after removal
         }
-
 
         function uploadFiles() {
             let formData = new FormData($("#uploadForm")[0]);
@@ -135,7 +151,7 @@
                 contentType: false,
                 processData: false,
                 success: function(response) {
-                    alert(response.message);
+                    showFlashMessage(response.message, "success");
                     displayUploadedFiles(response.files);
 
                     // Reset the form to its initial state
@@ -159,39 +175,64 @@
                     `);
                 },
                 error: function(error) {
-                    alert(error.responseJSON.error);
+                    showFlashMessage(error.responseJSON.error, "danger");
                 }
             });
         }
 
         function displayUploadedFiles(files) {
             let uploadedFilesBody = $("#uploadedFilesBody");
+
+            if ($.fn.DataTable.isDataTable("#uploadedFilesTable")) {
+                $("#uploadedFilesTable").DataTable().destroy(); // Destroy instance before updating table content
+            }
+
             uploadedFilesBody.empty(); // Clear existing rows
 
             if (files.length === 0) {
                 uploadedFilesBody.append(`
                     <tr>
-                        <td colspan="3" style="text-align: center;">No uploaded files.</td>
+                        <td>1</td>
+                        <td style="text-align: center;">No files uploaded...</td>
+                        <td></td>
                     </tr>
                 `);
-                return;
+            } else {
+                files.forEach((file, index) => {
+                    uploadedFilesBody.append(`
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${file}</td>
+                            <td>
+                                <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file}', this)">Delete File</button>
+                            </td>
+                        </tr>
+                    `);
+                });
             }
 
-            files.forEach((file, index) => {
-                let row = $(`
-                    <tr>
-                        <td>${index + 1}</td> <!-- Number column -->
-                        <td>${file}</td>
-                        <td>
-                            <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file}', this)">Delete File</button>
-                        </td>
-                    </tr>
-                `);
-                uploadedFilesBody.append(row);
-            });
+            // Reinitialize DataTable
+                 $('.paginated').each(function() {
+                 $(this).DataTable({
+                     paging: true,         // Enable pagination
+                     searching: true,      // Enable search box
+                     ordering: true,       // Enable column sorting
+                     lengthMenu: [5, 10, 25, 50, 100], // Rows per page options
+                     pageLength: 10,       // Default number of rows per page
+                     language: {
+                         search: "Search:",
+                         lengthMenu: "Show _MENU_ entries per page",
+                         info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                         paginate: {
+                             first: "First",
+                             last: "Last",
+                             next: "Next",
+                             previous: "Previous"
+                         }
+                     }
+                 });
+             });
         }
-
-
 
         function deleteFile(filename, button) {
             $.ajax({
@@ -200,19 +241,28 @@
                 contentType: "application/json",
                 data: JSON.stringify({ filename: filename }),
                 success: function(response) {
-                    alert(response.message);
+                    showFlashMessage(response.message, "success");
                     $(button).closest("tr").remove(); // Remove the file row from the table
                 },
                 error: function(error) {
-                    alert(error.responseJSON.error);
+                    showFlashMessage(error.responseJSON.error, "danger");
                 }
             });
         }
 
 
         function updateRowNumbers(tableId) {
-            $(`${tableId} tr`).each(function(index) {
-                $(this).find("td:first").text(index + 1); // Update first column with correct number
+            $(`${tableId} tr:gt(0)`).each(function(index) {
+                let hasAddFileButton = $(this).find("button").filter(function() {
+                    return $(this).text().trim() === "Add File";
+                }).length > 0;
+                if (!hasAddFileButton && index === 0) {
+                    $(this).find("td:first").text(index + 2);
+                }
+                else if(!hasAddFileButton && index > 0){
+                }else {
+                    $(this).find("td:first").text(""); // Clear row number for the "Add File" row
+                }
             });
         }
 
@@ -224,7 +274,6 @@
                 displayUploadedFiles(uploadedFiles);
             }
         });
-
 
     </script>
 

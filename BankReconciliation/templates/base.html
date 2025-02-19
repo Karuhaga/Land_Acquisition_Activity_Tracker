@@ -11,9 +11,12 @@
       </title>
       <link rel="icon" href="/static/images/logo_only.png" type="image/x-icon" />
       <link rel="stylesheet" href="/static/bs/css/bootstrap.min.css">
+      <link rel="stylesheet" href="/static/bs/css/dataTables.bootstrap5.min.css">
       <link rel="stylesheet" href="/static/fontawesome/css/all.css">
       <link rel="stylesheet" href="/static/css/styles.css">
       <script src="/static/bs/js/jquery-3.7.1.js"></script>
+      <script src="/static/bs/js/dataTables.min.js"></script>
+      <script src="/static/bs/js/dataTables.bootstrap5.min.js"></script>
       <script src="/static/bs/js/popper.min.js"></script>
       <script src="/static/bs/js/bootstrap.js"></script>
       <script>
@@ -24,9 +27,8 @@
 
              let lastPage = sessionStorage.getItem("lastPage") || dashboardUrl;
 
-
-
              function loadContent(url) {
+
                  // Check if the content is already loaded
                  if ($(".content").data("current-url") === url) {
                      return; // Exit if content is already loaded
@@ -115,6 +117,24 @@
          $(document).on("hidden.bs.collapse", ".panel-collapse", function() {
              $(this).closest(".panel").find(".caret-icon").removeClass("rotated");
          });
+
+         function showFlashMessage(message, category) {
+             let flashContainer = $("#flash-messages");
+
+             // Clear existing flash messages before adding a new one
+             flashContainer.empty();
+
+             let alertHtml = `
+                 <div class="alert alert-${category} alert-dismissible fade show" role="alert">
+                     ${message}
+                     <button type="button" class="m1-2 mb-1 close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                     </button>
+                 </div>
+             `;
+             flashContainer.append(alertHtml);
+         }
+
       </script>
 
    </head>
@@ -176,7 +196,7 @@
                   </div>
                   <div id="collapse2" class="panel-collapse collapse" data-parent="#accordion">
                      <a class="nav-link {% if request.path == url_for('submit_reconciliation_page') %} active {% endif %}" href="{{ url_for('submit_reconciliation_page') }}"> <i class="fa-solid fa-paper-plane"></i><span>Submit Reconciliation</span></a>
-                     <a class="nav-link {% if request.path == url_for('previous_submission_page') %} active {% endif %}" href="{{ url_for('previous_submission_page') }}"> <i class="fa-solid fa-folder"></i><span>Previous Submissions</span></a>
+                     <a class="nav-link {% if request.path == url_for('submitted_reconciliations_page') %} active {% endif %}" href="{{ url_for('submitted_reconciliations_page') }}"> <i class="fa-solid fa-folder"></i><span>Submitted Reconciliations</span></a>
                   </div>
                </div>
                <div class="panel panel-default">
@@ -211,18 +231,20 @@
          <!-- sidebar end -->
          {% endif %}
          <div class="content scrollable full-height-minus-header">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">
-               <button type="button" class="m1-2 mb-1 close" data-dismiss="alert" aria-label="Close">
-               <span aria-hidden="true">&times;</span>
-               </button>
-               {{ message }}
-            </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
+            <div id="flash-messages">
+                 {% with messages = get_flashed_messages(with_categories=true) %}
+                     {% if messages %}
+                         {% for category, message in messages %}
+                             <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                 {{ message }}
+                                 <button type="button" class="m1-2 mb-1 close" data-dismiss="alert" aria-label="Close">
+                                     <span aria-hidden="true">&times;</span>
+                                 </button>
+                             </div>
+                         {% endfor %}
+                     {% endif %}
+                 {% endwith %}
+             </div>
             {% block content %}
             {% endblock %}
          </div>
