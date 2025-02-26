@@ -45,7 +45,6 @@ class User(UserMixin):
         self.password_hash = password_hash
         self.email_address = email_address
 
-
     @staticmethod
     def get_by_username(username):
         conn = get_db_connection()
@@ -53,7 +52,8 @@ class User(UserMixin):
             return None  # Return None if the database connection fails
 
         cursor = conn.cursor()
-        cursor.execute("SELECT ID, Username, Fname, Mname, Sname, Password, Email FROM users WHERE Username = ?", (username,))
+        cursor.execute("SELECT ID, Username, Fname, Mname, Sname, Password, Email FROM users WHERE Username = ?",
+                       (username,))
         row = cursor.fetchone()
         conn.close()
 
@@ -61,10 +61,8 @@ class User(UserMixin):
             return User(*row)
         return None
 
-
     def get_id(self):
         return self.username  # Ensure Flask-Login gets username instead of an integer ID
-
 
     @staticmethod
     def hash_password(password):
@@ -97,19 +95,36 @@ class FileUploadBatch:
         return number_of_unsubmitted_requests
 
     @staticmethod
-    def insert_into_file_upload_batch(user_id):
+    def allocate_batch_id():
         conn = get_db_connection()
         if conn is None:
             return None  # Handle database connection failure
 
         cursor = conn.cursor()
 
-        # Get the last batch_id
-        cursor.execute("SELECT MAX(id) FROM file_upload_batch")
-        last_batch_id = cursor.fetchone()[0]  # Fetch last batch_id
+        try:
+            # Get the last batch_id
+            cursor.execute("SELECT MAX(id) FROM file_upload_batch")
+            last_batch_id = cursor.fetchone()[0]  # Fetch last batch_id
 
-        # Set new batch_id
-        new_batch_id = (last_batch_id + 1) if last_batch_id else 1
+            # Set new batch_id
+            new_batch_id = (last_batch_id + 1) if last_batch_id else 1
+
+            return new_batch_id
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_into_file_upload_batch(user_id, new_batch_id):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
 
         # Insert new batch record
         now = datetime.now()
@@ -128,6 +143,27 @@ class FileUploadBatch:
         finally:
             conn.close()
 
+    @staticmethod
+    def get_latest_batch_pending_submission_by_user(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        try:
+            # check if User has a request pending submission
+            cursor.execute("SELECT MAX(id) FROM file_upload_batch WHERE submission_status = 0 AND user_id = ? ", user_id)
+
+            userID = cursor.fetchone()[0]  # Fetch last batch_id
+            return userID
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
 
 class FileUpload:
     def __init__(self, id, batch_id, file_name, date_time):
@@ -137,7 +173,7 @@ class FileUpload:
         self.date_time = date_time
 
     @staticmethod
-    def insert_into_file_upload(batch_id, file_name):
+    def insert_into_file_upload(batch_id, file_name, bank_account, year, month):
         conn = get_db_connection()
         if conn is None:
             return None  # Handle database connection failure
@@ -153,8 +189,9 @@ class FileUpload:
 
         try:
             cursor.execute(
-                "INSERT INTO file_upload (id, batch_id, file_name, removed_by_user_on_upload_page) "
-                "VALUES (?, ?, ?, ?)",(new_file_id, batch_id, file_name, 0),
+                "INSERT INTO file_upload (id, batch_id, file_name, bank_account_id, year, month, "
+                "removed_by_user_on_upload_page)"
+                "VALUES (?, ?, ?, ?, ?, ?, ?)", (new_file_id, batch_id, file_name, bank_account, year, month, 0),
             )
             conn.commit()
             return new_file_id
@@ -176,18 +213,26 @@ class FileUpload:
         try:
             # Raw MSSQL Query to fetch all files that are not marked as removed
             query = """
-                            SELECT file_name 
-                            FROM file_upload 
-                            WHERE batch_id = ?
-                            AND removed_by_user_on_upload_page = 0
+                            SELECT b.name as bank_account_id, year, 
+                            (select DateName(month, DateAdd(month, month, 0) - 1)) as month, file_name 
+                            FROM file_upload a 
+                            LEFT OUTER JOIN bank_account b ON a.bank_account_id = b.id 
+                            WHERE batch_id = ? AND removed_by_user_on_upload_page = 0
                         """
-
             # Execute the query with user_id as parameter
             cursor.execute(query, (batch_id,))
             result = cursor.fetchall()
 
-            # Extract file names from result
-            files = [row.file_name for row in result]
+            # Convert query results to a list of dictionaries
+            files = [
+                {
+                    "bank_account": row.bank_account_id,
+                    "year": row.year,
+                    "month": row.month,
+                    "file_name": row.file_name
+                }
+                for row in result
+            ]
             return files
         except Exception as e:
             print("Database error:", e)
@@ -208,10 +253,10 @@ class FileUpload:
         try:
             # Fetch submitted reconciliations
             query = """
-                SELECT b.id, b.batch_id, b.file_name, a.date_time
-                FROM file_upload_batch a 
-                LEFT OUTER JOIN file_upload b ON a.id = b.batch_id 
-                WHERE a.user_id = ?	AND b.removed_by_user_on_upload_page = 0
+                        SELECT b.id, b.batch_id, b.file_name, a.date_time
+                        FROM file_upload_batch a 
+                        LEFT OUTER JOIN file_upload b ON a.id = b.batch_id 
+                        WHERE a.user_id = ?	AND b.removed_by_user_on_upload_page = 0
             """
             cursor.execute(query, (user_id,))
             result = cursor.fetchall()
@@ -258,3 +303,59 @@ class FileDelete:
                 return None
             finally:
                 conn.close()
+
+
+class BankAccount:
+    def __init__(self, id, name, bank_id, currency_id, strategic_business_unit_id):
+        self.id = id
+        self.name = name
+        self.bank_id = bank_id
+        self.currency_id = currency_id
+        self.strategic_business_unit_id = strategic_business_unit_id
+
+    @staticmethod
+    def get_bank_accounts_for_dropdown_menu():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """SELECT id, name, bank_id, currency_id, strategic_business_unit_id FROM bank_account ORDER BY 
+                        name"""
+            cursor.execute(query)
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            bank_accounts = [BankAccount(row.id, row.name, row.bank_id, row.currency_id, row.strategic_business_unit_id)
+                             for row in result]
+            return bank_accounts
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_bank_account_name_by_id(bank_account):
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Handle database connection failure
+
+        cursor = conn.cursor()
+
+        try:
+            # check if User has a request pending submission
+            cursor.execute("SELECT name FROM bank_account WHERE id = ? ", bank_account)
+
+            bank_account_name = cursor.fetchone()[0]  # Fetch last batch_id
+            return bank_account_name
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()

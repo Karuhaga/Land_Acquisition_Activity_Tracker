@@ -1,5 +1,5 @@
 from BankReconciliation import app, os, allowed_file
-from BankReconciliation.models import User, FileUploadBatch, FileUpload, FileDelete
+from BankReconciliation.models import User, FileUploadBatch, FileUpload, FileDelete, BankAccount
 from BankReconciliation.forms import LoginForm
 from flask import render_template, redirect, url_for, flash, request, jsonify, session
 from flask_login import login_user, logout_user, login_required, current_user
@@ -39,12 +39,18 @@ def dashboard_page():
 @app.route('/submit-reconciliation', methods=['GET', 'POST'])
 @login_required
 def submit_reconciliation_page():
+    # Fetch bank accounts from the database
+    bank_accounts = BankAccount.get_bank_accounts_for_dropdown_menu()
+    if bank_accounts is None:
+        return jsonify({"error": "No bank account found in the database"}), 500
+
+    #
     num_of_unsubmitted_requests = FileUploadBatch.check_batch_submission_status(current_user.id)
     if num_of_unsubmitted_requests is None:
         return jsonify({"error": "Database error while creating batch file upload"}), 500
 
     if num_of_unsubmitted_requests != 0:
-        batch = 1
+        batch = FileUploadBatch.get_latest_batch_pending_submission_by_user(current_user.id)
         uploaded_files = FileUpload.get_uploaded_pending_submission_files_by_user(batch)
         if uploaded_files is None:
             return jsonify({"error": "Database error while fetching uploaded files"}), 500
@@ -53,7 +59,7 @@ def submit_reconciliation_page():
 
     return render_template('submit_reconciliation.html',
                            num_of_unsubmitted_requests=num_of_unsubmitted_requests,
-                           uploaded_files=uploaded_files)
+                           uploaded_files=uploaded_files, bank_accounts=bank_accounts)
 
 
 @app.route('/upload', methods=['POST'])
@@ -65,15 +71,25 @@ def upload_files():
     files = request.files.getlist('files')  # Get list of uploaded files
     uploaded_files = []
 
-    # Create new batch entry
-    new_batch_id = FileUploadBatch.insert_into_file_upload_batch(current_user.id)
-    if new_batch_id is None:
+    # Initialise the new_batch_id variable
+    num_of_pending_batches = FileUploadBatch.get_latest_batch_pending_submission_by_user(current_user.id)
+    if num_of_pending_batches == 0:
+        new_batch_id = FileUploadBatch.allocate_batch_id()
+    else:
+        new_batch_id = FileUploadBatch.get_latest_batch_pending_submission_by_user(current_user.id)
+    # Insert into file_upload_batch database table
+    new_batch_row = FileUploadBatch.insert_into_file_upload_batch(current_user.id, new_batch_id)
+    if new_batch_row is None:
         return jsonify({"error": "Database error while creating batch file upload"}), 500
 
-    for file in files:
+    for i, file in enumerate(files):
         if file.filename == '':
             continue
         if file and allowed_file(file.filename):
+            bank_account = request.form.getlist("bank_account")[i]
+            year = request.form.getlist("year")[i]
+            month = request.form.getlist("month")[i]
+
             # Generate timestamp
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -84,12 +100,32 @@ def upload_files():
             # Save file with the new name
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
             file.save(file_path)
-            uploaded_files.append(new_filename)
 
-            # Create new row in insert_into_file_upload database table
-            new_file_id = FileUpload.insert_into_file_upload(new_batch_id, new_filename)
+            # Insert into database
+            new_file_id = FileUpload.insert_into_file_upload(new_batch_id, new_filename, bank_account, year, month)
             if new_file_id is None:
                 return jsonify({"error": "Database error while adding uploaded file"}), 500
+
+            # Fetch bank account name from DB
+            bank_account = BankAccount.get_bank_account_name_by_id(bank_account)
+            if not bank_account:
+                return jsonify({"error": "Invalid bank account selected"}), 400
+
+            # Convert month value to month name
+            month_names = {
+                "01": "January", "02": "February", "03": "March", "04": "April",
+                "05": "May", "06": "June", "07": "July", "08": "August",
+                "09": "September", "10": "October", "11": "November", "12": "December"
+            }
+            month_name = month_names.get(month, "Unknown")
+
+            # Append full metadata for JavaScript processing
+            uploaded_files.append({
+                "file_name": new_filename,
+                "bank_account": bank_account,
+                "year": year,
+                "month": month_name
+            })
 
     if uploaded_files:
         return jsonify({"message": "Files uploaded successfully!", "files": uploaded_files}), 200

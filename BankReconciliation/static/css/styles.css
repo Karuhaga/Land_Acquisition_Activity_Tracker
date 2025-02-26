@@ -228,6 +228,20 @@ form {
     padding: 0px;
     width: 100%;
 }
+#uploadForm thead{
+    font-size: 15px;
+}
+#uploadForm .form-control,
+#uploadForm input[type="file"]
+{
+    font-size: 12px; /* Apply to form fields and buttons */
+}
+#uploadedFilesTable thead{
+    font-size: 15px;
+}
+#uploadedFilesTable tbody{
+    font-size: 12px;
+}
 .btn-outline-custom {
     color: #fff;
     background-color: #4270a8;

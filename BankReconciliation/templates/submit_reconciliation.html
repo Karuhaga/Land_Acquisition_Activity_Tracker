@@ -20,6 +20,9 @@
                     <thead>
                         <tr>
                             <th style="text-align: right;">#</th> <!-- Row number column -->
+                            <th>Bank Account</th>
+                            <th>Year</th>
+                            <th>Month</th>
                             <th>Selected File</th>
                             <th style="text-align: right;">Action</th>
                         </tr>
@@ -29,26 +32,56 @@
                             <td>
                                 <div style="text-align: right;">1</div>
                             </td>
-                            <!-- File Input Field in its own td -->
+                            <td>
+                                <select class="form-control" name="bank_account">
+                                    <option value="">Select Bank Account</option>
+                                    {% for account in bank_accounts %}
+                                        <option value="{{ account.id }}">{{ account.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-control" name="year">
+                                    <option value="">Select Year</option>
+                                    {% for year in range(2020, 2031) %}
+                                    <option value="{{ year }}">{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-control" name="month">
+                                    <option value="">Select Month</option>
+                                    <option value="01">January</option>
+                                    <option value="02">February</option>
+                                    <option value="03">March</option>
+                                    <option value="04">April</option>
+                                    <option value="05">May</option>
+                                    <option value="06">June</option>
+                                    <option value="07">July</option>
+                                    <option value="08">August</option>
+                                    <option value="09">September</option>
+                                    <option value="10">October</option>
+                                    <option value="11">November</option>
+                                    <option value="12">December</option>
+                                </select>
+                            </td>
                             <td>
                                 <div class="file-input">
-                                    <input style="display: block; width:100%;" id="file-upload" type="file" name="files">
+                                    <input style="display: block; width:100%; padding: auto 0;" id="file-upload" type="file" name="files">
                                 </div>
                             </td>
-
                              <td>
                                 <div class="file-input"></div>
                             </td>
                         </tr>
-                    <tr>
+                        <tr>
                             <td>
                                 <div></div>
                             </td>
-                            <!-- File Input Field in its own td -->
-                            <td>
-
-                            </td>
-
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <td></td>
                             <td>
                                 <button class="btn-outline-custom" style="float: right;" type="button" onclick="addFileField()">Add File</button>
                             </td>
@@ -58,10 +91,7 @@
                 <table class="" style="width: 100%;">
                     <thead></thead>
                     <tbody>
-                        <tr>
-
-
-                        </tr>
+                        <tr></tr>
                         <tr>
                             <td>
                                 <div class="button-container">
@@ -85,6 +115,9 @@
                 <thead>
                     <tr>
                         <th>#</th> <!-- Row number column -->
+                        <th>Bank Account</th>
+                        <th>Year</th>
+                        <th>Month</th>
                         <th>File Name</th>
                         <th style="text-align: right;">Action</th>
                     </tr>
@@ -92,6 +125,9 @@
                 <tbody id="uploadedFilesBody">
                     <tr>
                         <td>1</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td style="text-align: center;">No files uploaded...</td>
                         <td></td>
                     </tr>
@@ -117,12 +153,49 @@
             const addButtonRow = $("#fileInputs tr:last"); // The "Add File" button is in the last row
             const newRowIndex = $("#fileInputs tr").length; // Adjust the index as needed
 
+            let bankAccountsOptions = `
+                <option value="">Select Bank Account</option>
+                {% for account in bank_accounts %}
+                    <option value="{{ account.id }}">{{ account.name }}</option>
+                {% endfor %}
+            `;
+
             const newRow = $(`
                 <tr>
                     <td style="text-align: right;">${newRowIndex}</td>
                     <td>
+                        <select class="form-control" name="bank_account">
+                            ${bankAccountsOptions}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-control" name="year">
+                            <option value="">Select Year</option>
+                            {% for year in range(2020, 2031) %}
+                            <option value="{{ year }}">{{ year }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-control" name="month">
+                            <option value="">Select Month</option>
+                            <option value="01">January</option>
+                            <option value="02">February</option>
+                            <option value="03">March</option>
+                            <option value="04">April</option>
+                            <option value="05">May</option>
+                            <option value="06">June</option>
+                            <option value="07">July</option>
+                            <option value="08">August</option>
+                            <option value="09">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </td>
+                    <td>
                         <div class="file-input">
-                            <input type="file" name="files" style="width: 100%;">
+                            <input style="display: block; width:100%; padding: auto 0;" id="file-upload" type="file" name="files">
                         </div>
                     </td>
                     <td>
@@ -142,7 +215,21 @@
         }
 
         function uploadFiles() {
-            let formData = new FormData($("#uploadForm")[0]);
+            let formData = new FormData();
+
+            $("#fileInputs tr").each(function () {
+                let bankAccount = $(this).find("select[name='bank_account']").val();
+                let year = $(this).find("select[name='year']").val();
+                let month = $(this).find("select[name='month']").val();
+                let fileInput = $(this).find("input[type='file']")[0];
+
+                if (fileInput && fileInput.files.length > 0) {
+                    formData.append("files", fileInput.files[0]);
+                    formData.append("bank_account", bankAccount);
+                    formData.append("year", year);
+                    formData.append("month", month);
+                }
+            });
 
             $.ajax({
                 url: "/upload",
@@ -152,6 +239,7 @@
                 processData: false,
                 success: function(response) {
                     showFlashMessage(response.message, "success");
+
                     displayUploadedFiles(response.files);
 
                     // Reset the form to its initial state
@@ -161,15 +249,48 @@
                     $("#fileInputs").html(`
                         <tr>
                             <td>
-                                <div>1</div>
+                                <div style="text-align: right;">1</div>
+                            </td>
+                            <td>
+                                <select class="form-control" name="bank_account">
+                                    <option value="">Select Bank Account</option>
+                                    {% for account in bank_accounts %}
+                                        <option value="{{ account.id }}">{{ account.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-control" name="year">
+                                    <option value="">Select Year</option>
+                                    {% for year in range(2020, 2031) %}
+                                    <option value="{{ year }}">{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-control" name="month">
+                                    <option value="">Select Month</option>
+                                    <option value="01">January</option>
+                                    <option value="02">February</option>
+                                    <option value="03">March</option>
+                                    <option value="04">April</option>
+                                    <option value="05">May</option>
+                                    <option value="06">June</option>
+                                    <option value="07">July</option>
+                                    <option value="08">August</option>
+                                    <option value="09">September</option>
+                                    <option value="10">October</option>
+                                    <option value="11">November</option>
+                                    <option value="12">December</option>
+                                </select>
                             </td>
                             <td>
                                 <div class="file-input">
-                                    <input type="file" name="files">
+                                    <input style="display: block; width:100%; padding: auto 0;" id="file-upload" type="file" name="files">
                                 </div>
                             </td>
-                            <td>
-
+                             <td>
+                                <div class="file-input"></div>
                             </td>
                         </tr>
                     `);
@@ -193,6 +314,9 @@
                 uploadedFilesBody.append(`
                     <tr>
                         <td>1</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td style="text-align: center;">No files uploaded...</td>
                         <td></td>
                     </tr>
@@ -202,9 +326,12 @@
                     uploadedFilesBody.append(`
                         <tr>
                             <td>${index + 1}</td>
-                            <td>${file}</td>
+                            <td>${file.bank_account}</td>
+                            <td>${file.year}</td>
+                            <td>${file.month}</td>
+                            <td>${file.file_name}</td>
                             <td>
-                                <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file}', this)">Delete File</button>
+                                <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file.file_name}', this)">Delete File</button>
                             </td>
                         </tr>
                     `);
@@ -249,7 +376,6 @@
                 }
             });
         }
-
 
         function updateRowNumbers(tableId) {
             $(`${tableId} tr:gt(0)`).each(function(index) {
