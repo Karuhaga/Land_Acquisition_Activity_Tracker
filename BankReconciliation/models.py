@@ -104,7 +104,7 @@ class FileUploadBatch:
 
         try:
             # Get the last batch_id
-            cursor.execute("SELECT MAX(id) FROM file_upload_batch")
+            cursor.execute("SELECT COALESCE(MAX(id), 0) FROM file_upload_batch")
             last_batch_id = cursor.fetchone()[0]  # Fetch last batch_id
 
             # Set new batch_id
@@ -153,10 +153,11 @@ class FileUploadBatch:
 
         try:
             # check if User has a request pending submission
-            cursor.execute("SELECT MAX(id) FROM file_upload_batch WHERE submission_status = 0 AND user_id = ? ", user_id)
+            cursor.execute("SELECT COALESCE(MAX(id), 0) FROM file_upload_batch WHERE submission_status = 0 AND "
+                           "user_id = ? ", user_id)
 
-            userID = cursor.fetchone()[0]  # Fetch last batch_id
-            return userID
+            user_id = cursor.fetchone()[0]  # Fetch last batch_id
+            return user_id
         except Exception as e:
             print("Database error:", e)
             return []
@@ -166,8 +167,11 @@ class FileUploadBatch:
 
 
 class FileUpload:
-    def __init__(self, id, batch_id, file_name, date_time):
+    def __init__(self, id, bank_account, year, month, batch_id, file_name, date_time):
         self.id = id
+        self.bank_account = bank_account
+        self.year = year
+        self.month = month
         self.batch_id = batch_id
         self.file_name = file_name
         self.date_time = date_time
@@ -187,11 +191,15 @@ class FileUpload:
         # Set new batch_id
         new_file_id = (last_file_id + 1) if last_file_id else 1
 
+        # Insert new batch record
+        now = datetime.now()
+
         try:
             cursor.execute(
                 "INSERT INTO file_upload (id, batch_id, file_name, bank_account_id, year, month, "
-                "removed_by_user_on_upload_page)"
-                "VALUES (?, ?, ?, ?, ?, ?, ?)", (new_file_id, batch_id, file_name, bank_account, year, month, 0),
+                "removed_by_user_on_upload_page, last_modified)"
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (new_file_id, batch_id, file_name, bank_account, year, month, 0, now),
             )
             conn.commit()
             return new_file_id
@@ -218,6 +226,7 @@ class FileUpload:
                             FROM file_upload a 
                             LEFT OUTER JOIN bank_account b ON a.bank_account_id = b.id 
                             WHERE batch_id = ? AND removed_by_user_on_upload_page = 0
+                            ORDER BY b.name
                         """
             # Execute the query with user_id as parameter
             cursor.execute(query, (batch_id,))
@@ -253,16 +262,17 @@ class FileUpload:
         try:
             # Fetch submitted reconciliations
             query = """
-                        SELECT b.id, b.batch_id, b.file_name, a.date_time
-                        FROM file_upload_batch a 
-                        LEFT OUTER JOIN file_upload b ON a.id = b.batch_id 
-                        WHERE a.user_id = ?	AND b.removed_by_user_on_upload_page = 0
+            SELECT b.id, c.name as bank_account, b.year, (select DateName(month, DateAdd(month, b.month, 
+            0) - 1)) as month, b.batch_id, b.file_name, FORMAT(a.date_time, 'yyyy-MM-dd HH:mm:ss') AS date_time FROM 
+            file_upload_batch a LEFT OUTER JOIN file_upload b ON a.id = b.batch_id LEFT OUTER JOIN bank_account c ON 
+            b.bank_account_id = c.id WHERE a.user_id = ? AND b.removed_by_user_on_upload_page = 0
+            ORDER BY c.name 
             """
             cursor.execute(query, (user_id,))
             result = cursor.fetchall()
 
             # Convert query result into list of Reconciliation objects
-            reconciliations = [FileUpload(row.id, row.batch_id, row.file_name, row.date_time) for row in result]
+            reconciliations = [FileUpload(row.id, row.bank_account, row.year, row.month, row.batch_id, row.file_name, row.date_time) for row in result]
             return reconciliations
         except Exception as e:
             print("Database error:", e)

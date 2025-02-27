@@ -75,12 +75,13 @@ def upload_files():
     num_of_pending_batches = FileUploadBatch.get_latest_batch_pending_submission_by_user(current_user.id)
     if num_of_pending_batches == 0:
         new_batch_id = FileUploadBatch.allocate_batch_id()
+
+        # Insert into file_upload_batch database table
+        new_batch_row = FileUploadBatch.insert_into_file_upload_batch(current_user.id, new_batch_id)
+        if new_batch_row is None:
+            return jsonify({"error": "Database error while creating batch file upload"}), 500
     else:
         new_batch_id = FileUploadBatch.get_latest_batch_pending_submission_by_user(current_user.id)
-    # Insert into file_upload_batch database table
-    new_batch_row = FileUploadBatch.insert_into_file_upload_batch(current_user.id, new_batch_id)
-    if new_batch_row is None:
-        return jsonify({"error": "Database error while creating batch file upload"}), 500
 
     for i, file in enumerate(files):
         if file.filename == '':
@@ -106,29 +107,12 @@ def upload_files():
             if new_file_id is None:
                 return jsonify({"error": "Database error while adding uploaded file"}), 500
 
-            # Fetch bank account name from DB
-            bank_account = BankAccount.get_bank_account_name_by_id(bank_account)
-            if not bank_account:
-                return jsonify({"error": "Invalid bank account selected"}), 400
-
-            # Convert month value to month name
-            month_names = {
-                "01": "January", "02": "February", "03": "March", "04": "April",
-                "05": "May", "06": "June", "07": "July", "08": "August",
-                "09": "September", "10": "October", "11": "November", "12": "December"
-            }
-            month_name = month_names.get(month, "Unknown")
-
-            # Append full metadata for JavaScript processing
-            uploaded_files.append({
-                "file_name": new_filename,
-                "bank_account": bank_account,
-                "year": year,
-                "month": month_name
-            })
+    # Fetch the updated list of uploaded files
+    uploaded_files = FileUpload.get_uploaded_pending_submission_files_by_user(new_batch_id)
 
     if uploaded_files:
         return jsonify({"message": "Files uploaded successfully!", "files": uploaded_files}), 200
+
     return jsonify({"error": "No valid files uploaded"}), 400
 
 

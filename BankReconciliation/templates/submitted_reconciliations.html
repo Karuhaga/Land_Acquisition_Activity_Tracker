@@ -21,21 +21,30 @@
                 <thead>
                     <tr>
                         <th>#</th> <!-- Row number column -->
+                        <th>Bank Account</th>
+                        <th>Year</th>
+                        <th>Month</th>
                         <th>File Name</th>
                         <th style="width: 10%; white-space: nowrap; text-align: left;">Batch</th>
-                        <th>Date Submitted</th>
+                        <th>Last Modified</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for reconciliation in reconciliations %}
                     <tr>
                         <td>{{ loop.index }}</td> <!-- Display row number -->
+                        <td>{{ reconciliation.bank_account }}</td>
+                        <td>{{ reconciliation.year }}</td>
+                        <td>{{ reconciliation.month }}</td>
                         <td>{{ reconciliation.file_name }}</td>
                         <td>{{ reconciliation.batch_id }}</td>
                         <td>{{ reconciliation.date_time }}</td>
                     </tr>
                     {% else %}
                     <tr>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td></td>
                         <td style="text-align: center;">No submitted reconciliations found.</td>
                         <td></td>
