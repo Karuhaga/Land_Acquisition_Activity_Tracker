@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
 {% block title %}
-    Submit Reconciliation
+    Submit Reconciliations
 {% endblock %}
 
 {% block page_title %}
-    <div data-page-title>Submit Reconciliation</div>
+    <div data-page-title>Submit Reconciliations</div>
 {% endblock %}
 
 {% block content %}
@@ -114,7 +114,7 @@
             <table id="uploadedFilesTable" class="table table-striped table-bordered table-hover paginated">
                 <thead>
                     <tr>
-                        <th>#</th> <!-- Row number column -->
+                        <th data-orderable="false" data-ordering="false">#</th> <!-- Row number column -->
                         <th>Bank Account</th>
                         <th>Year</th>
                         <th>Month</th>
@@ -133,13 +133,13 @@
                     </tr>
                 </tbody>
             </table>
-            <table class="" style="width: 100%;">
+            <table class="" style="width: 100%; margin-top: 1rem;">
                 <thead></thead>
                 <tbody>
                     <tr>
                         <td style="text-align: center;">
                             <div class="button-container">
-                                <button class="btn-outline-custom" type="button" onclick="">Submit Request</button>
+                                <button class="btn-outline-custom" type="button" onclick="submitFiles()">Submit Reconciliation(s)</button>
                             </div>
                         </td>
                     </tr>
@@ -216,8 +216,11 @@
 
         function uploadFiles() {
             let formData = new FormData();
+            let fileRows = $("#fileInputs tr");
+            let uploadedIndices = [];  // To track successfully uploaded rows
+            let duplicateIndices = []; // To track duplicate rows
 
-            $("#fileInputs tr").each(function () {
+            fileRows.each(function (index) {
                 let bankAccount = $(this).find("select[name='bank_account']").val();
                 let year = $(this).find("select[name='year']").val();
                 let month = $(this).find("select[name='month']").val();
@@ -228,6 +231,7 @@
                     formData.append("bank_account", bankAccount);
                     formData.append("year", year);
                     formData.append("month", month);
+                    uploadedIndices.push(index);
                 }
             });
 
@@ -238,11 +242,29 @@
                 contentType: false,
                 processData: false,
                 success: function(response) {
-                    showFlashMessage(response.message, "success");
+                    $("#fileInputs tr").css("background-color", ""); // Reset row colors
 
+                    if (response.duplicates && response.duplicates.length > 0) {
+                        duplicateIndices = response.duplicates;
+                        duplicateIndices.forEach(function(index) {
+                            $("#fileInputs tr").eq(index).css("background-color", "#ffcccc"); // Mark duplicates
+                        });
+                        showFlashMessage("Some files were not uploaded because their details already exist in the database.", "warning");
+                    }
+
+                    // Remove only successfully uploaded rows (excluding duplicates)
+                    uploadedIndices = uploadedIndices.filter(index => !duplicateIndices.includes(index));
+                    uploadedIndices.sort((a, b) => b - a); // Sort in descending order to avoid index shift issues
+                    uploadedIndices.forEach(index => {
+                        $("#fileInputs tr").eq(index).remove();
+                    });
+
+                    // Display updated uploaded files table
                     displayUploadedFiles(response.files);
 
-                    // Reset the form to its initial state
+                    if (!response.duplicates || response.duplicates.length === 0) {
+                        showFlashMessage(response.message, "success");
+                        // Reset the form to its initial state
                     $("#uploadForm")[0].reset();
 
                     // Remove all dynamically added file input fields except the first one
@@ -293,7 +315,20 @@
                                 <div class="file-input"></div>
                             </td>
                         </tr>
+                        <tr>
+                            <td>
+                                <div></div>
+                            </td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td>
+                                <button class="btn-outline-custom" style="float: right;" type="button" onclick="addFileField()">Add File</button>
+                            </td>
+                        </tr>
                     `);
+                    }
                 },
                 error: function(error) {
                     showFlashMessage(error.responseJSON.error, "danger");
@@ -342,10 +377,41 @@
                  $('.paginated').each(function() {
                  $(this).DataTable({
                      paging: true,         // Enable pagination
-                     searching: true,      // Enable search box
-                     ordering: true,       // Enable column sorting
-                     lengthMenu: [5, 10, 25, 50, 100], // Rows per page options
-                     pageLength: 10,       // Default number of rows per page
+                    searching: true,      // Enable search box
+                    ordering: true,       // Enable column sorting
+                    lengthMenu: [5, 10, 25, 50, 100], // Rows per page options
+                    pageLength: 10,       // Default number of rows per page
+                    dom: '<"row"<"col-md-6"l><"col-md-6"f>>' + // Keep "Show entries" & "Search"
+                         '<"row"<"col-md-12"B>>' + // Buttons in a separate row
+                         '<"row"<"col-md-12"t>>' + // Table
+                         '<"row"<"col-md-6"i><"col-md-6"p>>', // Info & Pagination
+                    buttons: [
+                        {
+                            extend: 'copy',
+                            text: 'Copy',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'csv',
+                            text: 'Export to CSV',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'excel',
+                            text: 'Export to Excel',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'pdf',
+                            text: 'Export to PDF',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'print',
+                            text: 'Print',
+                            className: 'btn btn-secondary'
+                        }
+                    ],
                      language: {
                          search: "Search:",
                          lengthMenu: "Show _MENU_ entries per page",
@@ -392,11 +458,51 @@
             });
         }
 
+        function submitFiles() {
+            let files = [];
+
+            $("#uploadedFilesBody tr").each(function () {
+                let bankAccount = $(this).find("td:nth-child(2)").text().trim();
+                let year = $(this).find("td:nth-child(3)").text().trim();
+                let month = $(this).find("td:nth-child(4)").text().trim();
+                let fileName = $(this).find("td:nth-child(5)").text().trim();
+
+                if (fileName && bankAccount && year && month) {
+                    files.push({
+                        bank_account_id: bankAccount,
+                        year: year,
+                        month: month,
+                        file_name: fileName,
+                        batch_id: 1 // Placeholder batch_id (Replace this with the actual batch ID if available)
+                    });
+                }
+            });
+
+            if (files.length === 0) {
+                alert("No files to submit.");
+                return;
+            }
+
+            $.ajax({
+                url: "/submit_files",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ files: files }),
+                success: function (response) {
+                    alert(response.message);
+                    location.reload(); // Refresh the page to reflect changes
+                },
+                error: function (xhr) {
+                    alert(xhr.responseJSON.error);
+                }
+            });
+        }
+
         $(document).ready(function() {
-            const numOfUnsubmittedRequests = {{ num_of_unsubmitted_requests }};
+            const numOfUnsubmittedFiles = {{ num_of_unsubmitted_files }};
             const uploadedFiles = {{ uploaded_files | tojson }};
 
-            if (numOfUnsubmittedRequests != 0) {
+            if (numOfUnsubmittedFiles != 0) {
                 displayUploadedFiles(uploadedFiles);
             }
         });

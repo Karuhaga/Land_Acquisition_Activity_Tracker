@@ -12,6 +12,7 @@
       <link rel="icon" href="/static/images/logo_only.png" type="image/x-icon" />
       <link rel="stylesheet" href="/static/bs/css/bootstrap.min.css">
       <link rel="stylesheet" href="/static/bs/css/dataTables.bootstrap5.min.css">
+      <link rel="stylesheet" href="/static/bs/css/jquery.dataTables.css">
       <link rel="stylesheet" href="/static/fontawesome/css/all.css">
       <link rel="stylesheet" href="/static/css/styles.css">
       <script src="/static/bs/js/jquery-3.7.1.js"></script>
@@ -19,6 +20,16 @@
       <script src="/static/bs/js/dataTables.bootstrap5.min.js"></script>
       <script src="/static/bs/js/popper.min.js"></script>
       <script src="/static/bs/js/bootstrap.js"></script>
+      <!-- DataTables CSS -->
+      <link rel="stylesheet" href="/static/bs/css/jquery.dataTables.min.css">
+      <link rel="stylesheet" href="/static/bs/css/buttons.dataTables.min.css">
+      <!-- DataTables and Buttons JS -->
+      <script src="/static/bs/js/dataTables.buttons.min.js"></script>
+      <script src="/static/bs/js/jszip.min.js"></script>
+      <script src="/static/bs/js/pdfmake.min.js"></script>
+      <script src="/static/bs/js/vfs_fonts.js"></script>
+      <script src="/static/bs/js/buttons.html5.min.js"></script>
+      <script src="/static/bs/js/buttons.print.min.js"></script>
       <script>
          //dynamically loading content in the content div
          $(document).ready(function() {
@@ -166,11 +177,10 @@
          {% set pages_with_no_page_title = ['/', '/login', '/home']%}
          {% if request.path not in pages_with_no_page_title %}
          <div id="dynamic-page-title" style="width:100%; border-bottom: 2px solid #dfdfe0; background-color: #f8f9fa; padding: 5px 5px 5px 10px; font-size: 15px;">
-             {% block page_title %}
-             {% endblock %}
+            {% block page_title %}
+            {% endblock %}
          </div>
          {% endif %}
-
          {% set pages_with_no_sidebar = ['/', '/login', '/home']%}
          {% if request.path not in pages_with_no_sidebar %}
          <!-- sidebar start -->
@@ -185,45 +195,63 @@
                </label>
             </div>
             <div class="panel-group" id="accordion">
+               <!-- Static Sidebar Items -->
                <div class="panel panel-default">
                   <div class="panel-heading">
-                     <a class="nav-link menu-collapse-heading d-flex align-items-center {% if request.path == url_for('dashboard_page') %} active {% endif %}" href="{{ url_for('dashboard_page') }}"> <i class="fa fa-chart-pie" aria-hidden="true"></i><span>Dashboard</span><i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i></a>
+                     <a class="nav-link menu-collapse-heading d-flex align-items-center {% if request.path == url_for('dashboard_page') %} active {% endif %}"
+                        href="{{ url_for('dashboard_page') }}">
+                     <i class="fa fa-chart-pie"></i>
+                     <span>Dashboard</span>
+                     <i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i>
+                     </a>
                   </div>
                </div>
                <div class="panel panel-default">
                   <div class="panel-heading">
-                     <a data-toggle="collapse" data-parent="#accordion" href="#collapse2" class="menu-collapse-heading d-flex align-items-center"><i class="fa-sharp fa-solid fa-list-check"></i><span>Actions</span><i class="fa fa-caret-down caret-icon" style=""></i></a>
+                     <a data-toggle="collapse" data-parent="#accordion" href="#collapse2"
+                        class="menu-collapse-heading d-flex align-items-center">
+                     <i class="fa-sharp fa-solid fa-list-check"></i>
+                     <span>Actions</span>
+                     <i class="fa fa-caret-down caret-icon"></i>
+                     </a>
                   </div>
                   <div id="collapse2" class="panel-collapse collapse" data-parent="#accordion">
-                     <a class="nav-link {% if request.path == url_for('submit_reconciliation_page') %} active {% endif %}" href="{{ url_for('submit_reconciliation_page') }}"> <i class="fa-solid fa-paper-plane"></i><span>Submit Reconciliation</span></a>
-                     <a class="nav-link {% if request.path == url_for('submitted_reconciliations_page') %} active {% endif %}" href="{{ url_for('submitted_reconciliations_page') }}"> <i class="fa-solid fa-folder"></i><span>Submitted Reconciliations</span></a>
+                     {% if 'Submit Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('submit_reconciliations_page') %} active {% endif %}"
+                           href="{{ url_for('submit_reconciliations_page') }}">
+                           <i class="fa-solid fa-paper-plane"></i>
+                           <span>Submit Reconciliations</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Submitted Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('submitted_reconciliations_page') %} active {% endif %}"
+                           href="{{ url_for('submitted_reconciliations_page') }}">
+                        <i class="fa-solid fa-folder"></i>
+                        <span>Submitted Reconciliations</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Approve Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('approve_reconciliations_page') %} active {% endif %}"
+                           href="{{ url_for('approve_reconciliations_page') }}">
+                        <i class="fa fa-check-square"></i>
+                        <span>Approve Reconciliations</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Approve Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('approve_reconciliations_page') %} active {% endif %}"
+                           href="{{ url_for('approve_reconciliations_page') }}">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span>Approved Reconciliations</span>
+                        </a>
+                     {% endif %}
                   </div>
-               </div>
-               <div class="panel panel-default">
-                  <div class="panel-heading">
-                     <a data-toggle="collapse" data-parent="#accordion" href="#collapse3" class="menu-collapse-heading d-flex align-items-center"><i class="fa-sharp fa-solid fa-toolbox"></i><span>Administration</span><i class="fa fa-caret-down caret-icon"></i></a>
-                  </div>
-                  <div id="collapse3" class="panel-collapse collapse" data-parent="#accordion">
-                     <div class="panel-body">
-                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
-                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
+                  <div class="panel panel-default">
+                     <div class="panel-heading">
+                        <a class="nav-link" href="{{ url_for('logout_page') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('logout_page') }}';"> <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span><i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i></a>
                      </div>
-                  </div>
-               </div>
-               <div class="panel panel-default">
-                  <div class="panel-heading">
-                     <a data-toggle="collapse" data-parent="#accordion" href="#collapse4" class="menu-collapse-heading d-flex align-items-center"><i class="fa fa-file" aria-hidden="true"></i><span><span></span>Reports</span><i class="fa fa-caret-down caret-icon"></i></a>
-                  </div>
-                  <div id="collapse4" class="panel-collapse collapse" data-parent="#accordion">
-                     <div class="panel-body">
-                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Submit</span></a>
-                        <a class="nav-link" href="#"> <i class="fa-sharp fa-solid fa-list-check"></i><span>Approve</span></a>
-                     </div>
-                  </div>
-               </div>
-               <div class="panel panel-default">
-                  <div class="panel-heading">
-                     <a class="nav-link" href="{{ url_for('logout_page') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('logout_page') }}';"> <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span><i class="fa fa-caret-down caret-icon" style="visibility: hidden;"></i></a>
                   </div>
                </div>
             </div>
@@ -232,19 +260,19 @@
          {% endif %}
          <div class="content scrollable full-height-minus-header">
             <div id="flash-messages">
-                 {% with messages = get_flashed_messages(with_categories=true) %}
-                     {% if messages %}
-                         {% for category, message in messages %}
-                             <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                 {{ message }}
-                                 <button type="button" class="m1-2 mb-1 close" data-dismiss="alert" aria-label="Close">
-                                     <span aria-hidden="true">&times;</span>
-                                 </button>
-                             </div>
-                         {% endfor %}
-                     {% endif %}
-                 {% endwith %}
-             </div>
+               {% with messages = get_flashed_messages(with_categories=true) %}
+               {% if messages %}
+               {% for category, message in messages %}
+               <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                  {{ message }}
+                  <button type="button" class="m1-2 mb-1 close" data-dismiss="alert" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+                  </button>
+               </div>
+               {% endfor %}
+               {% endif %}
+               {% endwith %}
+            </div>
             {% block content %}
             {% endblock %}
          </div>

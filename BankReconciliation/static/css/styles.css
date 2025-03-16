@@ -16,7 +16,7 @@ header{
     top: 0;
     z-index: 1000;
 }
-nav{
+header nav{
     background-color: #fff;
     height: 87px;
     border-bottom: 3px solid #4270a8;
@@ -335,7 +335,6 @@ form {
 .caret-icon.rotated {
     transform: rotate(180deg); /* Rotate 180 degrees for expanded state */
 }
-
 
 /* Poppins Font */
 .poppins-thin {
