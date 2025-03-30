@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
 {% block title %}
-    Approve Reconciliations
+    Approved Reconciliations
 {% endblock %}
 
 {% block page_title %}
-    <div data-page-title>Approve Reconciliations</div>
+    <div data-page-title>Approved Reconciliations</div>
 {% endblock %}
 
 
@@ -13,20 +13,18 @@
 
     <div class="card">
        <div class="card-header">
-           Approve Reconciliations
+           Approved Reconciliations
        </div>
 
         <div class="card-body">
             <table id="uploadedFilesTable" class="table table-striped table-bordered table-hover paginated">
                 <thead>
                     <tr>
-                        <th data-orderable="false" data-ordering="false"><input type="checkbox" id="selectAll"></th><!-- Select all checkbox -->
                         <th data-orderable="false" data-ordering="false">#</th> <!-- Row number column -->
                         <th>Bank Account</th>
                         <th>Year</th>
                         <th>Month</th>
-                        <th>Last Modified</th>
-                        <th>Approve As</th>
+                        <th>Created On</th>
                         <th data-orderable="false" data-ordering="false">Download File</th>
                         <th data-orderable="false" data-ordering="false">View Request</th>
                     </tr>
@@ -34,25 +32,21 @@
                 <tbody id="uploadedFilesBody">
                     {% for reconciliation in reconciliations %}
                     <tr>
-                        <td><input type="checkbox" class="rowCheckbox"></td> <!-- Row checkbox -->
                         <td>{{ loop.index }}</td> <!-- Display row number -->
                         <td>{{ reconciliation.bank_account }}</td>
                         <td>{{ reconciliation.year }}</td>
                         <td>{{ reconciliation.month }}</td>
                         <td>{{ reconciliation.date_time }}</td>
-                        <td>{{ reconciliation.approve_as }}</td>
                         <td>
                             <button class="btn-outline-custom download-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">Download</button>
                         </td>
                         <td>
-                            <button class="btn-outline-custom download-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">View</button>
+                            <button class="btn-outline-custom view-request-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">View</button>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td></td>
-                        <td style="text-align: center;">No submitted reconciliations found.</td>
-                        <td></td>
+                        <td colspan="8" style="text-align: center;">No submitted reconciliations found.</td>
                         <td></td>
                         <td></td>
                         <td></td>
@@ -63,29 +57,14 @@
                     {% endfor %}
                 </tbody>
             </table>
-                        <table class="" style="width: 100%; margin-top: 1rem;">
-                <thead></thead>
-                <tbody>
-                    <tr>
-                        <td style="text-align: center;">
-                            <div class="button-container">
-                                <button class="btn-outline-custom" type="button" onclick="approveReconciliations()">Approve Reconciliation(s)</button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     </div>
 
     {% include 'includes/flash_message_modal.html' %}
-    {% include 'includes/approval_action_modal.html' %}
-
-    <div id="loadingIndicator" style="display:none; text-align:center;">
-        <img src="spinner.gif" alt="Loading...">
-    </div>
+    {% include 'includes/reconciliation_file_details_modal.html' %}
 
 <script>
+
     function showFlashMessage(message, type) {
         let title = "Notification"; // Default title
 
@@ -101,82 +80,6 @@
         $("#flashMessageBody").html(message);
         $("#flashMessageModal").modal("show");
     }
-
-    function approveReconciliations() {
-        files = [];
-
-        $("#uploadedFilesBody tr").each(function () {
-            let checkbox = $(this).find(".rowCheckbox");
-
-                // Process only checked rows
-            if (checkbox.prop("checked")) {
-                let bankAccount = $(this).find("td:nth-child(3)").text().trim();
-                let year = $(this).find("td:nth-child(4)").text().trim();
-                let month = $(this).find("td:nth-child(5)").text().trim();
-                let fileName = $(this).find("td:nth-child(8) .download-btn").data("filename");
-
-                if (fileName && bankAccount && year && month) {
-                    files.push({
-                        bank_account_id: bankAccount,
-                        year: year,
-                        month: month,
-                        file_name: fileName,
-                    });
-                }
-            }
-            });
-
-            if (files.length === 0) {
-                errorMessage = "No files to approve.";
-                messageType = "warning";
-                showFlashMessage(errorMessage, messageType);
-                return;
-            }
-
-            // Open the modal
-            $("#approvalActionModal").modal("show");
-        }
-
-    // Handle submission from the modal
-    $("#confirmApprovalAction").on("click", function () {
-        let action = $("#approvalAction").val();
-        let comment = $("#approvalComment").val().trim();
-
-        if (!action) {
-            showFlashMessage("Please select an action.", "warning");
-            return;
-        }
-
-       $.ajax({
-            url: "/approve-reconciliations-update",
-            type: "POST",
-            contentType: "application/json",
-            data: JSON.stringify({
-                files: files,
-                action: action,
-                comment: comment
-            }),
-            beforeSend: function() {
-                $("#loadingIndicator").show(); // Show loading spinner
-            },
-            success: function(response) {
-                $("#loadingIndicator").hide(); // Hide loading spinner
-                $("#approvalActionModal").modal("hide");
-                showFlashMessage(response.message, "success");
-
-                $("#flashMessageModal").on("hidden.bs.modal", function () {
-                    files = [];
-                    $(".content").load(location.href + " .content > *"); // Reload only the content div
-                });
-            },
-            error: function(xhr) {
-                $("#loadingIndicator").hide(); // Hide loading spinner on error
-                let errorMessage = xhr.responseJSON.error || "An unexpected error occurred.";
-                let messageType = xhr.responseJSON.type || "danger";
-                showFlashMessage(errorMessage, messageType)
-            }
-        });
-    });
 
     $(document).ready(function() {
         $('#uploadedFilesTable').DataTable({
@@ -232,11 +135,42 @@
             }
         });
 
+        // Calling the reconciliation_file_details_modal.html
+        $(document).on("click", ".view-request-btn", function() {
+            let row = $(this).closest("tr");
+
+            let bankAccount = row.find("td:nth-child(2)").text().trim();
+            let year = row.find("td:nth-child(3)").text().trim();
+            let month = row.find("td:nth-child(4)").text().trim();
+            let lastModified = row.find("td:nth-child(5)").text().trim();
+            let approveAs = row.find("td:nth-child(6)").text().trim();
+            let fileName = $(this).data("filename");
+
+            // Populate the modal fields
+            $("#viewBankAccount").text(bankAccount);
+            $("#viewYear").text(year);
+            $("#viewMonth").text(month);
+            $("#viewLastModified").text(lastModified);
+            $("#viewApproveAs").text(approveAs);
+            $("#viewFileName").text(fileName);
+
+            // Fetch workflow details
+            loadReconciliationWorkflow(bankAccount, year, month, fileName);
+
+            // Show the modal after data is populated
+            $("#viewRequestModal").modal("show");
+        });
+
+        // Handle "Close" button click
+        $("#closeViewRequest").click(function() {
+            $("#viewRequestCard").slideUp();
+        });
+
         // Handle "Download File" button click
         $(document).on("click", ".download-btn", function() {
             let fileName = $(this).data("filename");
             if (fileName) {
-                window.location.href = `/download/${fileName}`;
+                window.location.href = `/download/${encodeURIComponent(fileName)}`;
             } else {
                 alert("File not found.");
             }
@@ -256,6 +190,57 @@
             }
         });
     });
+
+    function approveReconciliations() {
+    let files = [];
+
+    $("#uploadedFilesBody tr").each(function () {
+        let checkbox = $(this).find(".rowCheckbox");
+
+        // Process only checked rows
+        if (checkbox.prop("checked")) {
+            let bankAccount = $(this).find("td:nth-child(2)").text().trim();
+            let year = $(this).find("td:nth-child(3)").text().trim();
+            let month = $(this).find("td:nth-child(4)").text().trim();
+            let fileName = $(this).find("td:nth-child(7) .download-btn").data("filename");
+
+            console.log("Row Data:", { bankAccount, year, month, fileName });
+
+            if (fileName && bankAccount && year && month) {
+                files.push({
+                    bank_account_id: bankAccount,
+                    year: year,
+                    month: month,
+                    file_name: fileName,
+                });
+            }
+        }
+    });
+
+    if (files.length === 0) {
+        errorMessage = "No files to approve.";
+        messageType = "warning";
+        showFlashMessage(errorMessage, messageType);
+        return;
+    }
+
+    console.log("Sending Data:", JSON.stringify({ files })); // Debugging line
+
+    $.ajax({
+        url: "/approve-reconciliations-update",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ files: files }),
+        success: function (response) {
+            alert(response.message);
+            location.reload(); // Refresh the page to reflect changes
+        },
+        error: function (xhr) {
+            alert(xhr.responseJSON ? xhr.responseJSON.error : "An error occurred.");
+        }
+    });
+}
+
 </script>
 
 {% endblock %}

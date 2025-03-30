@@ -3,6 +3,7 @@ from flask import request, redirect, url_for, flash
 from flask_login import current_user
 from BankReconciliation.models import get_db_connection
 
+
 def role_required(*workflow_names):
     """Decorator to restrict access to users with at least one of the required workflows."""
     def decorator(f):
@@ -33,8 +34,8 @@ def role_required(*workflow_names):
             cursor.execute("""
                 SELECT wb.id 
                 FROM workflow_breakdown wb
-                JOIN user_role ur ON wb.responsible_role_id = ur.role_id
-                WHERE wb.responsible_role_id IN ({})
+                LEFT OUTER JOIN role_workflow_breakdown rwb ON wb.id = rwb.workflow_breakdown_id 
+                WHERE rwb.role_id IN ({})
             """.format(",".join("?" * len(user_roles))), tuple(user_roles))
 
             allowed_workflows = {row[0] for row in cursor.fetchall()}  # Set of workflow breakdown IDs

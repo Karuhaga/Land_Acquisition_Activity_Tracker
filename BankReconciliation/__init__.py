@@ -57,8 +57,9 @@ def inject_menu_items():
     cursor.execute("""
         SELECT mi.name
         FROM workflow_breakdown wb
-        JOIN menu_item mi ON wb.menu_item_id = mi.id
-        WHERE wb.responsible_role_id IN ({})
+        LEFT OUTER JOIN menu_item mi ON wb.menu_item_id = mi.id
+        LEFT OUTER JOIN role_workflow_breakdown rwb ON wb.id = rwb.workflow_breakdown_id 
+        WHERE rwb.role_id IN ({})
     """.format(",".join("?" * len(user_roles))), tuple(user_roles))
 
     menu_items = [row[0] for row in cursor.fetchall()]

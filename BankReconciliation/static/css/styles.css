@@ -21,6 +21,29 @@ header nav{
     height: 87px;
     border-bottom: 3px solid #4270a8;
 }
+.navbar-nav .dropdown-menu {
+    right: 0;
+    left: auto;
+    min-width: 150px;
+}
+/* Add Bootstrap's nav-link styles to nav-link2 */
+.nav-link2 {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: #3c4e63;
+    text-decoration: none;
+    font-size: 1rem;
+    background-color: transparent;
+    border: 0;
+}
+
+.nav-link2:hover,
+.nav-link2:focus {
+    color: #3c4e63;
+    text-decoration: none;
+    background-color: transparent;
+}
+
 main{
     margin-top: 87px;
 }
@@ -39,6 +62,18 @@ main{
     transition: 0.5s ease;
     transition-property: left, width; /* Smooth transition for collapse */
     overflow-x: hidden; /* Prevent horizontal scroll */
+}
+#flashMessageModal {
+    z-index: 11000; /* Higher than Bootstrap modals (default is 1050) */
+}
+#flashMessageModal .modal-dialog {
+
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    max-width: 600px;
+    width: auto;
 }
 .table{
    color: #4270a8;
@@ -250,6 +285,19 @@ form {
     border-radius: 5px;
 }
 .btn-outline-custom:hover {
+    background-color: #3bc0ed;
+    color: #fff;
+    border: 3px solid #3bc0ed;
+    border-radius: 5px;
+}
+.btn-outline-custom2 {
+    color: #fff;
+    background-color: #484a52;
+    transition: all 0.3s ease;
+    border: 3px solid #484a52;
+    border-radius: 5px;
+}
+.btn-outline-custom2:hover {
     background-color: #3bc0ed;
     color: #fff;
     border: 3px solid #3bc0ed;

@@ -95,7 +95,7 @@
                         <tr>
                             <td>
                                 <div class="button-container">
-                                    <button class="btn-outline-custom" type="button" onclick="uploadFiles()">Upload File(s)</button>
+                                    <button class="btn-outline-custom" type="button" onclick="showConfirmation('upload')">Upload File(s)</button>
                                 </div>
                             </td>
                         </tr>
@@ -119,6 +119,7 @@
                         <th>Year</th>
                         <th>Month</th>
                         <th>File Name</th>
+                        <th>Batch</th>
                         <th style="text-align: right;">Action</th>
                     </tr>
                 </thead>
@@ -130,6 +131,7 @@
                         <td></td>
                         <td style="text-align: center;">No files uploaded...</td>
                         <td></td>
+                        <td></td>
                     </tr>
                 </tbody>
             </table>
@@ -139,7 +141,7 @@
                     <tr>
                         <td style="text-align: center;">
                             <div class="button-container">
-                                <button class="btn-outline-custom" type="button" onclick="submitFiles()">Submit Reconciliation(s)</button>
+                                <button class="btn-outline-custom" type="button" onclick="showConfirmation('submit')">Submit Reconciliation(s)</button>
                             </div>
                         </td>
                     </tr>
@@ -148,7 +150,51 @@
         </div>
     </div>
 
+    {% include 'includes/confirmation_modal.html' %}
+    {% include 'includes/flash_message_modal.html' %}
+
     <script>
+        function showFlashMessage(message, type) {
+            let title = "Notification"; // Default title
+
+            if (type === "danger") {
+                title = "Error";
+            } else if (type === "success") {
+                title = "Success";
+            } else if (type === "warning") {
+                title = "Warning";
+            }
+
+            $("#flashMessageTitle").text(title);
+            $("#flashMessageBody").html(message);
+            $("#flashMessageModal").modal("show");
+        }
+
+        function showConfirmation(actionType) {
+            let modalTitle = "";
+            let modalMessage = "";
+
+            if (actionType === "upload") {
+                modalTitle = "Confirm File Upload";
+                modalMessage = "Are you sure you want to upload the selected file(s)?";
+                $("#confirmAction").off("click").on("click", function () {
+                    $("#confirmationModal").modal("hide");
+                    uploadFiles();
+                });
+            } else if (actionType === "submit") {
+                modalTitle = "Confirm Submission";
+                modalMessage = "Are you sure you want to submit the uploaded reconciliation(s)?";
+                $("#confirmAction").off("click").on("click", function () {
+                    $("#confirmationModal").modal("hide");
+                    submitFiles();
+                });
+            }
+
+            $("#confirmationModalLabel").text(modalTitle);
+            $("#confirmationMessage").text(modalMessage);
+            $("#confirmationModal").modal("show");
+        }
+
         function addFileField() {
             const addButtonRow = $("#fileInputs tr:last"); // The "Add File" button is in the last row
             const newRowIndex = $("#fileInputs tr").length; // Adjust the index as needed
@@ -354,6 +400,7 @@
                         <td></td>
                         <td style="text-align: center;">No files uploaded...</td>
                         <td></td>
+                        <td></td>
                     </tr>
                 `);
             } else {
@@ -365,6 +412,7 @@
                             <td>${file.year}</td>
                             <td>${file.month}</td>
                             <td>${file.file_name}</td>
+                            <td>${file.batch_id}</td>
                             <td>
                                 <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file.file_name}', this)">Delete File</button>
                             </td>
@@ -466,6 +514,7 @@
                 let year = $(this).find("td:nth-child(3)").text().trim();
                 let month = $(this).find("td:nth-child(4)").text().trim();
                 let fileName = $(this).find("td:nth-child(5)").text().trim();
+                let batch = $(this).find("td:nth-child(6)").text().trim();
 
                 if (fileName && bankAccount && year && month) {
                     files.push({
@@ -473,13 +522,15 @@
                         year: year,
                         month: month,
                         file_name: fileName,
-                        batch_id: 1 // Placeholder batch_id (Replace this with the actual batch ID if available)
+                        batch_id: batch,
                     });
                 }
             });
 
             if (files.length === 0) {
-                alert("No files to submit.");
+                errorMessage = "No files to submit.";
+                messageType = "warning";
+                showFlashMessage(errorMessage, messageType);
                 return;
             }
 
@@ -489,11 +540,16 @@
                 contentType: "application/json",
                 data: JSON.stringify({ files: files }),
                 success: function (response) {
-                    alert(response.message);
-                    location.reload(); // Refresh the page to reflect changes
+                    showFlashMessage(response.message, "success");
+                    // Wait for modal to close before reloading
+                    $("#flashMessageModal").on("hidden.bs.modal", function () {
+                        $(".content").load(location.href + " .content > *"); // Reload only the content div
+                    });
                 },
                 error: function (xhr) {
-                    alert(xhr.responseJSON.error);
+                    let errorMessage = xhr.responseJSON.error || "An unexpected error occurred.";
+                    let messageType = xhr.responseJSON.type || "danger";
+                    showFlashMessage(errorMessage, messageType);
                 }
             });
         }

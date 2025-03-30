@@ -30,6 +30,9 @@
       <script src="/static/bs/js/vfs_fonts.js"></script>
       <script src="/static/bs/js/buttons.html5.min.js"></script>
       <script src="/static/bs/js/buttons.print.min.js"></script>
+      <!-- Add Chart.js library -->
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
       <script>
          //dynamically loading content in the content div
          $(document).ready(function() {
@@ -160,16 +163,18 @@
             </button>
             {% set pages_with_no_navbar_menu = ['/', '/login', '/home']%}
             {% if request.path not in pages_with_no_navbar_menu %}
-            <div class="collapse navbar-collapse" id="navbarNav" style="">
-               {% if current_user.is_authenticated %}
-               <ul class="navbar-nav ml-auto" style="">
-                  <li class="nav-item">
-                     <a class="nav-link" href="{{ url_for('logout_page') }}" onclick="event.preventDefault(); window.location.href='{{ url_for('logout_page') }}';">Logout</a>
-                  </li>
-               </ul>
-               {% else %}
-               {% endif %}
-            </div>
+            <ul class="navbar-nav ml-auto">
+                {% if current_user.is_authenticated %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link2 dropdown-toggle" href="#" id="userDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      {{ " ".join([current_user.fname, current_user.mname, current_user.sname] | select("string") | list) }}
+                  </a>
+                  <div class="dropdown-menu dropdown-menu-right" aria-labelledby="userDropdown">
+                     <a class="dropdown-item" href="{{ url_for('logout_page') }}">Logout</a>
+                  </div>
+                </li>
+                {% endif %}
+            </ul>
             {% endif %}
          </nav>
       </header>
@@ -240,9 +245,9 @@
                         </a>
                      {% endif %}
 
-                     {% if 'Approve Reconciliations' in menu_items %}
-                        <a class="nav-link {% if request.path == url_for('approve_reconciliations_page') %} active {% endif %}"
-                           href="{{ url_for('approve_reconciliations_page') }}">
+                     {% if 'Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('approved_reconciliations_page') %} active {% endif %}"
+                           href="{{ url_for('approved_reconciliations_page') }}">
                         <i class="fa-solid fa-folder-open"></i>
                         <span>Approved Reconciliations</span>
                         </a>
