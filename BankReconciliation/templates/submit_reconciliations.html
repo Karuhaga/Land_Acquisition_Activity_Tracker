@@ -119,7 +119,7 @@
                         <th>Year</th>
                         <th>Month</th>
                         <th>File Name</th>
-                        <th>Batch</th>
+                        <th>Download File</th>
                         <th style="text-align: right;">Action</th>
                     </tr>
                 </thead>
@@ -150,25 +150,7 @@
         </div>
     </div>
 
-    {% include 'includes/confirmation_modal.html' %}
-    {% include 'includes/flash_message_modal.html' %}
-
     <script>
-        function showFlashMessage(message, type) {
-            let title = "Notification"; // Default title
-
-            if (type === "danger") {
-                title = "Error";
-            } else if (type === "success") {
-                title = "Success";
-            } else if (type === "warning") {
-                title = "Warning";
-            }
-
-            $("#flashMessageTitle").text(title);
-            $("#flashMessageBody").html(message);
-            $("#flashMessageModal").modal("show");
-        }
 
         function showConfirmation(actionType) {
             let modalTitle = "";
@@ -412,7 +394,9 @@
                             <td>${file.year}</td>
                             <td>${file.month}</td>
                             <td>${file.file_name}</td>
-                            <td>${file.batch_id}</td>
+                            <td>
+                                <button class="btn-outline-custom" style="float: right;" type="button" data-filename="${file.file_name}" onclick="downloadFile(this)">Download File</button>
+                            </td>
                             <td>
                                 <button class="btn-outline-custom" style="float: right;" type="button" onclick="deleteFile('${file.file_name}', this)">Delete File</button>
                             </td>
@@ -491,6 +475,23 @@
             });
         }
 
+        // Handle "Download File" button click using data-filename
+        function downloadFile(button) {
+            const filename = button.getAttribute('data-filename');
+
+            if (!filename) {
+                alert("Filename not provided.");
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = `/download/${encodeURIComponent(filename)}`; // Adjust if your route is different
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         function updateRowNumbers(tableId) {
             $(`${tableId} tr:gt(0)`).each(function(index) {
                 let hasAddFileButton = $(this).find("button").filter(function() {
@@ -543,6 +544,7 @@
                     showFlashMessage(response.message, "success");
                     // Wait for modal to close before reloading
                     $("#flashMessageModal").on("hidden.bs.modal", function () {
+                        files = [];
                         $(".content").load(location.href + " .content > *"); // Reload only the content div
                     });
                 },

@@ -24,6 +24,7 @@
                         <th>Bank Account</th>
                         <th>Year</th>
                         <th>Month</th>
+                        <th>Status</th>
                         <th>Created On</th>
                         <th data-orderable="false" data-ordering="false">Download File</th>
                         <th data-orderable="false" data-ordering="false">View Request</th>
@@ -36,6 +37,7 @@
                         <td>{{ reconciliation.bank_account }}</td>
                         <td>{{ reconciliation.year }}</td>
                         <td>{{ reconciliation.month }}</td>
+                        <td>{{ reconciliation.status }}</td>
                         <td>{{ reconciliation.date_time }}</td>
                         <td>
                             <button class="btn-outline-custom download-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">Download</button>
@@ -46,9 +48,10 @@
                     </tr>
                     {% else %}
                     <tr>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td colspan="8" style="text-align: center;">No submitted reconciliations found.</td>
-                        <td></td>
-                        <td></td>
                         <td></td>
                         <td></td>
                         <td></td>
@@ -136,15 +139,16 @@
         });
 
         // Calling the reconciliation_file_details_modal.html
-        $(document).on("click", ".view-request-btn", function() {
+        $(document).off("click", ".view-request-btn").on("click", ".view-request-btn", function() {
             let row = $(this).closest("tr");
 
             let bankAccount = row.find("td:nth-child(2)").text().trim();
             let year = row.find("td:nth-child(3)").text().trim();
             let month = row.find("td:nth-child(4)").text().trim();
-            let lastModified = row.find("td:nth-child(5)").text().trim();
-            let approveAs = row.find("td:nth-child(6)").text().trim();
+            let lastModified = row.find("td:nth-child(6)").text().trim();
+            let approveAs = row.find("td:nth-child(5)").text().trim();
             let fileName = $(this).data("filename");
+
 
             // Populate the modal fields
             $("#viewBankAccount").text(bankAccount);

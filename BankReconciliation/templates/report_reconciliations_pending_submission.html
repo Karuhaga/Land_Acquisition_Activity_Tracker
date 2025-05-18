@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    Reconciliations Pending Submission
+{% endblock %}
+
+{% block page_title %}
+    <div data-page-title>Reconciliations Pending Submission</div>
+{% endblock %}
+
+
+{% block content %}
+
+    <div class="card">
+       <div class="card-header">
+           Reconciliations Pending Submission
+       </div>
+
+        <div class="card-body">
+            <table id="uploadedFilesTable" class="table table-striped table-bordered table-hover paginated">
+                <thead>
+                    <tr>
+                        <th data-orderable="false" data-ordering="false">#</th> <!-- Row number column -->
+                        <th>Bank Account</th>
+                        <th>Year</th>
+                        <th>Month</th>
+                        <th>Responsible Person(s)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reconciliation in reconciliations %}
+                    <tr>
+                        <td>{{ loop.index }}</td> <!-- Display row number -->
+                        <td>{{ reconciliation.bank_account }}</td>
+                        <td>{{ reconciliation.year }}</td>
+                        <td>{{ reconciliation.month }}</td>
+                        <td>{{ reconciliation.responsible_users }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td style="text-align: center;">No submitted reconciliations found.</td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+$(document).ready(function() {
+    $('#uploadedFilesTable').DataTable({
+        paging: true,         // Enable pagination
+        searching: true,      // Enable search box
+        ordering: true,       // Enable column sorting
+        lengthMenu: [5, 10, 25, 50, 100], // Rows per page options
+        pageLength: 10,       // Default number of rows per page
+        dom: '<"row"<"col-md-6"l><"col-md-6"f>>' + // Keep "Show entries" & "Search"
+             '<"row"<"col-md-12"B>>' + // Buttons in a separate row
+             '<"row"<"col-md-12"t>>' + // Table
+             '<"row"<"col-md-6"i><"col-md-6"p>>', // Info & Pagination
+        buttons: [
+            {
+                extend: 'copy',
+                text: 'Copy',
+                className: 'btn btn-secondary'
+            },
+            {
+                extend: 'csv',
+                text: 'Export to CSV',
+                className: 'btn btn-secondary'
+            },
+            {
+                extend: 'excel',
+                text: 'Export to Excel',
+                className: 'btn btn-secondary'
+            },
+            {
+                extend: 'pdf',
+                text: 'Export to PDF',
+                className: 'btn btn-secondary'
+            },
+            {
+                extend: 'print',
+                text: 'Print',
+                className: 'btn btn-secondary'
+            }
+        ],
+        language: {
+            search: "Search:",
+            lengthMenu: "Show _MENU_ entries per page",
+            info: "Showing _START_ to _END_ of _TOTAL_ entries",
+            paginate: {
+                first: "First",
+                last: "Last",
+                next: "Next",
+                previous: "Previous"
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

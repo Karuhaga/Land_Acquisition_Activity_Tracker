@@ -48,177 +48,179 @@
 </div>
 
 <style>
-/* Reduce table spacing */
-.table-sm th, .table-sm td {
-padding: 4px 8px !important;
-font-size: 14px;
-vertical-align: middle;
-}
+    /* Reduce table spacing */
+    .table-sm th, .table-sm td {
+    padding: 4px 8px !important;
+    font-size: 14px;
+    vertical-align: middle;
+    }
 
-#workflowMapContainer{
-    padding-top: 25px;
-}
+    #workflowMapContainer{
+        padding-top: 25px;
+    }
 
-.workflow-divider {
-    border: 0;
-    height: .4px;
-    background: #dfdfe0;
-    margin-bottom: 10px;
-}
+    .workflow-divider {
+        border: 0;
+        height: .4px;
+        background: #dfdfe0;
+        margin-bottom: 10px;
+    }
 
-.workflow-item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    margin-bottom: 30px;
-    position: relative;
-}
+    .workflow-item {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-bottom: 30px;
+        position: relative;
+    }
 
-/* Left and right text columns */
-.workflow-text {
-    flex: 1;
-    max-width: 300px;
-    text-align: center;
-}
+    /* Left and right text columns */
+    .workflow-text {
+        flex: 1;
+        max-width: 300px;
+        text-align: center;
+    }
 
-.text-right {
-    text-align: right;
-    padding-right: 20px;
-}
+    .text-right {
+        text-align: right;
+        padding-right: 20px;
+    }
 
-.text-left {
-    text-align: left;
-    padding-left: 20px;
-}
+    .text-left {
+        text-align: left;
+        padding-left: 20px;
+    }
 
-/* Central column containing icons and arrows */
-.workflow-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 80px;
-    position: relative;
-}
+    /* Central column containing icons and arrows */
+    .workflow-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        position: relative;
+    }
 
-/* Circular step icons */
-.workflow-step {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 20px;
-    color: white;
-    font-weight: bold;
-    text-align: center;
-    z-index: 2;
-    position: relative;
-}
+    /* Circular step icons */
+    .workflow-step {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 20px;
+        color: white;
+        font-weight: bold;
+        text-align: center;
+        z-index: 2;
+        position: relative;
+    }
 
-/* Status colors */
-.workflow-step.approved {
-    background-color: #28a745; /* Green */
-}
+    /* Status colors */
+    .workflow-step.approved {
+        background-color: #28a745; /* Green */
+    }
 
-.workflow-step.submitted {
-    background-color: #28a745; /* Green */
-}
+    .workflow-step.submitted {
+        background-color: #28a745; /* Green */
+    }
 
-.workflow-step.pending {
-    background-color: #74787d; /* Yellow */
-}
+    .workflow-step.pending {
+        background-color: #74787d;
+    }
 
-.workflow-step.rejected {
-    background-color: #dc3545; /* Red */
-}
+    .workflow-step.rejected {
+        background-color: #dc3545; /* Red */
+    }
 
-/* Vertical arrows between steps */
-.workflow-arrow {
-    width: 4px;
-    background-color: #007bff;
-    position: absolute;
-    top: 70px; /* Position the arrow directly below the circular icon */
-    height: 30px; /* Adjust the height to make sure the arrow touches both steps */
-    transform: translateY(5px); /* Adjust to align the arrow properly */
-}
+    /* Vertical arrows between steps */
+    .workflow-arrow {
+        width: 4px;
+        background-color: #007bff;
+        position: absolute;
+        top: 70px; /* Position the arrow directly below the circular icon */
+        height: 30px; /* Adjust the height to make sure the arrow touches both steps */
+        transform: translateY(5px); /* Adjust to align the arrow properly */
+    }
 
-/* Create arrow pointer at the bottom */
-.workflow-arrow:after {
-    content: '';
-    position: absolute;
-    bottom: -8px; /* Move pointer below the arrow */
-    left: 50%;
-    margin-left: -6px; /* Center the pointer */
-    width: 0;
-    height: 0;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 8px solid #007bff; /* Color of the arrow pointer */
-}
+    /* Create arrow pointer at the bottom */
+    .workflow-arrow:after {
+        content: '';
+        position: absolute;
+        bottom: -8px; /* Move pointer below the arrow */
+        left: 50%;
+        margin-left: -6px; /* Center the pointer */
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 8px solid #007bff; /* Color of the arrow pointer */
+    }
 
-/* Fix for last item (no arrow) */
-.workflow-item:last-child .workflow-arrow {
-    display: none;
-}
+    /* Fix for last item (no arrow) */
+    .workflow-item:last-child .workflow-arrow {
+        display: none;
+    }
 </style>
 
 <script>
     function loadReconciliationWorkflow(bankAccount, year, month, fileName) {
-    $.get("/get-reconciliation-workflow", { bank_account: bankAccount, year: year, month: month, file_name: fileName })
-    .done(function(response) {
-        $("#workflowMap").empty();
+        $.get("/get-reconciliation-workflow", { bank_account: bankAccount, year: year, month: month, file_name: fileName })
+        .done(function(response) {
+            $("#workflowMap").empty();
 
-        response.workflow_steps.forEach((step, index) => {
-            let className = step.status === "Approved" ? "approved" :
-                            step.status === "Submitted" ? "submitted" :
-                            step.status === "Rejected" ? "rejected" : "pending";
+            response.workflow_steps.forEach((step, index) => {
+                let className = step.status === "Approved" ? "approved" :
+                                step.status === "Submitted" ? "submitted" :
+                                step.status === "Rejected" ? "rejected" : "pending";
 
-            let iconClass = step.status === "Approved" ? "fa-check-circle" :
-                            step.status === "Submitted" ? "fa-check-circle" :
-                            step.status === "Rejected" ? "fa-times-circle" : "fa-clock";
+                let iconClass = step.status === "Approved" ? "fa-check-circle" :
+                                step.status === "Submitted" ? "fa-check-circle" :
+                                step.status === "Rejected" ? "fa-times-circle" : "fa-clock";
 
-            let leftText = index % 2 === 0 ?
-                `<div class="workflow-text text-right">
-                    <strong>${step.name}</strong><br>
-                    <small>Role: ${step.role}</small><br>
-                    <small>Status: ${step.status}</small><br>
-                    <small>Approver: ${step.approver || 'N/A'}</small><br>
-                    <small>Date: ${step.date || 'N/A'}</small>
-                </div>`
-            : `<div class="workflow-text"></div>`;
+                let leftText = index % 2 === 0 ?
+                    `<div class="workflow-text text-right">
+                        <strong style="text-decoration: underline;">${step.name}</strong><br>
+                        <strong>Role:</strong> <small>${step.role}</small><br>
+                        <strong>Status:</strong> <small>${step.status}</small><br>
+                        <strong>Approver:</strong> <small>${step.approver || 'N/A'}</small><br>
+                        <strong>Date:</strong> <small>${step.date || 'N/A'}</small><br>
+                        <strong>Comment:</strong> <small>${step.comment || ' '}</small>
+                    </div>`
+                : `<div class="workflow-text"></div>`;
 
-            let rightText = index % 2 !== 0 ?
-                `<div class="workflow-text text-left">
-                    <strong>${step.name}</strong><br>
-                    <small>Role: ${step.role}</small><br>
-                    <small>Status: ${step.status}</small><br>
-                    <small>Approver ID: ${step.approver || 'N/A'}</small><br>
-                    <small>Date: ${step.date || 'N/A'}</small>
-                </div>`
-            : `<div class="workflow-text"></div>`;
+                let rightText = index % 2 !== 0 ?
+                    `<div class="workflow-text text-left">
+                        <strong style="text-decoration: underline;">${step.name}</strong><br>
+                        <strong>Role:</strong> <small>${step.role}</small><br>
+                        <strong>Status:</Strong> <small>${step.status}</small><br>
+                        <strong>Approver:</strong> <small>${step.approver || 'N/A'}</small><br>
+                        <strong>Date:</strong> <small>${step.date || 'N/A'}</small><br>
+                        <strong>Comment:</strong> <small>${step.comment || ' '}</small>
+                    </div>`
+                : `<div class="workflow-text"></div>`;
 
-            let stepHTML = `
-                <div class="workflow-item">
-                    ${leftText}
-                    <div class="workflow-center">
-                        <div class="workflow-step ${className}">
-                            <i class="fa ${iconClass}"></i>
+                let stepHTML = `
+                    <div class="workflow-item">
+                        ${leftText}
+                        <div class="workflow-center">
+                            <div class="workflow-step ${className}">
+                                <i class="fa ${iconClass}"></i>
+                            </div>
+                            ${index < response.workflow_steps.length - 1 ? '<div class="workflow-arrow"></div>' : ''}
                         </div>
-                        ${index < response.workflow_steps.length - 1 ? '<div class="workflow-arrow"></div>' : ''}
+                        ${rightText}
                     </div>
-                    ${rightText}
-                </div>
-            `;
+                `;
 
-            $("#workflowMap").append(stepHTML);
+                $("#workflowMap").append(stepHTML);
+            });
+        })
+        .fail(function(error) {
+            console.error("Error loading workflow:", error);
         });
-    })
-    .fail(function(error) {
-        console.error("Error loading workflow:", error);
-    });
-}
+    }
 
 </script>

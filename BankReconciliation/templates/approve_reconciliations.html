@@ -45,8 +45,8 @@
                             <button class="btn-outline-custom download-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">Download</button>
                         </td>
                         <td>
-                            <button class="btn-outline-custom download-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">View</button>
-                        </td>
+                            <button class="btn-outline-custom view-request-btn" style="float: right;" type="button" data-filename="{{ reconciliation.file_name }}">View</button>
+                       </td>
                     </tr>
                     {% else %}
                     <tr>
@@ -80,9 +80,10 @@
 
     {% include 'includes/flash_message_modal.html' %}
     {% include 'includes/approval_action_modal.html' %}
+    {% include 'includes/reconciliation_file_details_modal.html' %}
 
     <div id="loadingIndicator" style="display:none; text-align:center;">
-        <img src="spinner.gif" alt="Loading...">
+        <img src="{{ url_for('static', filename='spinner.gif') }}" alt="Loading...">
     </div>
 
 <script>
@@ -105,10 +106,10 @@
     function approveReconciliations() {
         files = [];
 
-        $("#uploadedFilesBody tr").each(function () {
+        $("#uploadedFilesBody tr").each(function() {
             let checkbox = $(this).find(".rowCheckbox");
 
-                // Process only checked rows
+            // Process only checked rows
             if (checkbox.prop("checked")) {
                 let bankAccount = $(this).find("td:nth-child(3)").text().trim();
                 let year = $(this).find("td:nth-child(4)").text().trim();
@@ -124,21 +125,21 @@
                     });
                 }
             }
-            });
+        });
 
-            if (files.length === 0) {
-                errorMessage = "No files to approve.";
-                messageType = "warning";
-                showFlashMessage(errorMessage, messageType);
-                return;
-            }
-
-            // Open the modal
-            $("#approvalActionModal").modal("show");
+        if (files.length === 0) {
+            errorMessage = "No files to approve.";
+            messageType = "warning";
+            showFlashMessage(errorMessage, messageType);
+            return;
         }
 
+        // Open the modal
+        $("#approvalActionModal").modal("show");
+    }
+
     // Handle submission from the modal
-    $("#confirmApprovalAction").on("click", function () {
+    $(document).on("click", "#confirmApprovalAction", function() {
         let action = $("#approvalAction").val();
         let comment = $("#approvalComment").val().trim();
 
@@ -147,7 +148,7 @@
             return;
         }
 
-       $.ajax({
+        $.ajax({
             url: "/approve-reconciliations-update",
             type: "POST",
             contentType: "application/json",
@@ -160,13 +161,21 @@
                 $("#loadingIndicator").show(); // Show loading spinner
             },
             success: function(response) {
+                $("#confirmApprovalAction").prop("disabled", false);
                 $("#loadingIndicator").hide(); // Hide loading spinner
                 $("#approvalActionModal").modal("hide");
                 showFlashMessage(response.message, "success");
 
-                $("#flashMessageModal").on("hidden.bs.modal", function () {
+                $("#flashMessageModal").on("hidden.bs.modal", function() {
+                    // Save expanded panels
+                    let expandedPanels = [];
+                    $(".panel-collapse.in, .panel-collapse.show").each(function() {
+                        expandedPanels.push(this.id);
+                    });
+                    localStorage.setItem("expandedPanels", JSON.stringify(expandedPanels));
                     files = [];
-                    $(".content").load(location.href + " .content > *"); // Reload only the content div
+                    // $(".content").load(location.href + " .content > *"); // Reload only the content div
+                    location.reload();
                 });
             },
             error: function(xhr) {
@@ -179,21 +188,35 @@
     });
 
     $(document).ready(function() {
+        $('.rowCheckbox, #selectAll').prop('checked', false);
+
+        // Restore sidebar expanded state
+        const savedPanels = JSON.parse(localStorage.getItem("expandedPanels") || "[]");
+        savedPanels.forEach(function(id) {
+            const panel = $("#" + id);
+            panel.addClass("in show"); // For Bootstrap 3 or 4
+            panel.prev(".panel-heading").find(".menu-collapse-heading").attr("aria-expanded", "true");
+        });
+
+        // Optionally clear the stored value if you want one-time restoration
+        localStorage.removeItem("expandedPanels");
+
         $('#uploadedFilesTable').DataTable({
-            paging: true,         // Enable pagination
-            searching: true,      // Enable search box
-            ordering: true,       // Enable column sorting
-            columnDefs: [
-                { orderable: false, targets: 0} // Disable sorting for the first column (checkbox)
+            paging: true, // Enable pagination
+            searching: true, // Enable search box
+            ordering: true, // Enable column sorting
+            columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                } // Disable sorting for the first column (checkbox)
             ],
             lengthMenu: [5, 10, 25, 50, 100], // Rows per page options
-            pageLength: 10,       // Default number of rows per page
+            pageLength: 10, // Default number of rows per page
             dom: '<"row"<"col-md-6"l><"col-md-6"f>>' + // Keep "Show entries" & "Search"
-                 '<"row"<"col-md-12"B>>' + // Buttons in a separate row
-                 '<"row"<"col-md-12"t>>' + // Table
-                 '<"row"<"col-md-6"i><"col-md-6"p>>', // Info & Pagination
-            buttons: [
-                {
+                '<"row"<"col-md-12"B>>' + // Buttons in a separate row
+                '<"row"<"col-md-12"t>>' + // Table
+                '<"row"<"col-md-6"i><"col-md-6"p>>', // Info & Pagination
+            buttons: [{
                     extend: 'copy',
                     text: 'Copy',
                     className: 'btn btn-secondary'
@@ -255,6 +278,37 @@
                 $('#selectAll').prop('checked', true);
             }
         });
+    });
+
+    // Calling the reconciliation_file_details_modal.html
+    $(document).on("click", ".view-request-btn", function() {
+        let row = $(this).closest("tr");
+
+        let bankAccount = row.find("td:nth-child(3)").text().trim();
+        let year = row.find("td:nth-child(4)").text().trim();
+        let month = row.find("td:nth-child(5)").text().trim();
+        let lastModified = row.find("td:nth-child(6)").text().trim();
+        let approveAs = row.find("td:nth-child(7)").text().trim();
+        let fileName = $(this).data("filename");
+
+        // Populate the modal fields
+        $("#viewBankAccount").text(bankAccount);
+        $("#viewYear").text(year);
+        $("#viewMonth").text(month);
+        $("#viewLastModified").text(lastModified);
+        $("#viewApproveAs").text(approveAs);
+        $("#viewFileName").text(fileName);
+
+        // Fetch workflow details
+        loadReconciliationWorkflow(bankAccount, year, month, fileName);
+
+        // Show the modal after data is populated
+        $("#viewRequestModal").modal("show");
+    });
+
+    // Handle "Close" button click
+    $("#closeViewRequest").click(function() {
+        $("#viewRequestCard").slideUp();
     });
 </script>
 
