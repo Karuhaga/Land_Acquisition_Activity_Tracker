@@ -88,20 +88,28 @@
                  });
              }
 
-             $("a.nav-link").off("click").on("click", function(e) {
-                 const url = $(this).attr("href");
+            $("a.nav-link").off("click").on("click", function(e) {
+                const url = $(this).attr("href");
 
-                 if (url === "{{ url_for('login_page') }}" || url === "{{ url_for('logout_page') }}") {
-                     sessionStorage.removeItem("lastPage");
-                     return;
-                 }
+                if (url === "{{ url_for('login_page') }}" || url === "{{ url_for('logout_page') }}") {
+                    sessionStorage.removeItem("lastPage");
+                    return;
+                }
 
-                 e.preventDefault();
+                e.preventDefault();
 
-                 loadContent(url);
+                // Remove active class from all nav links
+                $(".nav-link").removeClass("active");
 
-                 history.pushState(null, null, url);
-             });
+                // Add active class to the clicked link
+                $(this).addClass("active");
+
+                // Load the page content
+                loadContent(url);
+
+                history.pushState(null, null, url);
+            });
+
 
              window.onpopstate = function() {
                  loadContent(location.href);
@@ -125,14 +133,16 @@
                  }
              });
 
-             function setActiveNavLink() {
-                 $(".nav-link").removeClass("active");
-                 $(".nav-link").each(function() {
-                     if (this.href === window.location.href) {
-                         $(this).addClass("active");
-                     }
-                 });
-             }
+            function setActiveNavLink() {
+                $(".nav-link").removeClass("active");
+                const currentPath = new URL(window.location.href).pathname;
+
+                $(".nav-link").each(function () {
+                    if (new URL(this.href).pathname === currentPath) {
+                        $(this).addClass("active");
+                    }
+                });
+            }
 
              // Flag to check if session timeout check has been done
              let sessionExpiredHandled = false;
@@ -354,6 +364,113 @@
                         <span>Fully Approved Reconciliations</span>
                         </a>
                      {% endif %}
+                  </div>
+
+                   <div class="panel-heading">
+                     <a data-toggle="collapse" data-parent="#accordion" href="#collapse4"
+                        class="menu-collapse-heading d-flex align-items-center">
+                     <i class="fa-solid fa-user-tie"></i>&nbsp;
+                     <span>Admin</span>
+                     <i class="fa fa-caret-down caret-icon"></i>
+                     </a>
+                  </div>
+                  <div id="collapse4" class="panel-collapse collapse" data-parent="#accordion">
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_bank_account_responsible_user') %} active {% endif %}"
+                           href="{{ url_for('admin_bank_account_responsible_user') }}">
+                        <i class="fas fa-user-shield"></i>
+                        <span>Bank Account Responsible User</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_bank_accounts') %} active {% endif %}"
+                           href="{{ url_for('admin_bank_accounts') }}">
+                        <i class="fas fa-credit-card"></i>
+                        <span>Bank Accounts</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_banks') %} active {% endif %}"
+                           href="{{ url_for('admin_banks') }}">
+                        <i class="fas fa-university"></i>
+                        <span>Banks</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_currencies') %} active {% endif %}"
+                           href="{{ url_for('admin_currencies') }}">
+                        <i class="fas fa-credit-card"></i>
+                        <span>Currencies</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_organisation_unit') %} active {% endif %}"
+                           href="{{ url_for('admin_organisation_unit') }}">
+                        <i class="fas fa-sitemap"></i>
+                        <span>Organisation Unit</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Fully Approved Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_organisation_unit_tier') %} active {% endif %}"
+                           href="{{ url_for('admin_organisation_unit_tier') }}">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Organisation Unit Tier</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Reconciliations Pending Approval' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_role_workflow_breakdown') %} active {% endif %}"
+                           href="{{ url_for('admin_role_workflow_breakdown') }}">
+                        <i class="fas fa-people-arrows"></i>
+                        <span>Role Workflow Breakdown</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Reconciliations Pending Approval' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_roles') %} active {% endif %}"
+                           href="{{ url_for('admin_roles') }}">
+                        <i class="fas fa-users-cog"></i>
+                        <span>Roles</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - All Submitted Reconciliations' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_user_roles_page') %} active {% endif %}"
+                           href="{{ url_for('admin_user_roles_page') }}">
+                        <i class="fas fa-user-tag"></i>
+                        <span>User Roles</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Reconciliations Pending Submission' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_users_page') %} active {% endif %}"
+                           href="{{ url_for('admin_users_page') }}">
+                        <i class="fas fa-users"></i>
+                        <span>Users</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Reconciliations Pending Submission' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_workflow_breakdown') %} active {% endif %}"
+                           href="{{ url_for('admin_workflow_breakdown') }}">
+                        <i class="fas fa-cubes"></i>
+                        <span>Workflow Breakdown</span>
+                        </a>
+                     {% endif %}
+
+                     {% if 'Report - Reconciliations Pending Submission' in menu_items %}
+                        <a class="nav-link {% if request.path == url_for('admin_workflows_page') %} active {% endif %}"
+                           href="{{ url_for('admin_workflows_page') }}">
+                        <i class="fas fa-redo-alt"></i>
+                        <span>Workflows</span>
+                        </a>
+                     {% endif %}
 
                   </div>
                   <div class="panel panel-default">
@@ -385,7 +502,31 @@
             {% endblock %}
 
             {% include 'includes/confirmation_modal.html' %}
+            {% include 'includes/user_add_modal.html' %}
+            {% include 'includes/user_edit_modal.html' %}
+            {% include 'includes/user_password_change_modal.html' %}
+            {% include 'includes/role_add_modal.html' %}
+            {% include 'includes/role_edit_modal.html' %}
+            {% include 'includes/user_role_add_modal.html' %}
+            {% include 'includes/user_role_edit_modal.html' %}
+            {% include 'includes/bank_add_modal.html' %}
+            {% include 'includes/bank_edit_modal.html' %}
+            {% include 'includes/bank_account_add_modal.html' %}
+            {% include 'includes/bank_account_edit_modal.html' %}
+            {% include 'includes/currency_add_modal.html' %}
+            {% include 'includes/currency_edit_modal.html' %}
+            {% include 'includes/bank_account_responsible_user_add_modal.html' %}
+            {% include 'includes/bank_account_responsible_user_edit_modal.html' %}
+            {% include 'includes/organisation_unit_tier_add_modal.html' %}
+            {% include 'includes/organisation_unit_tier_edit_modal.html' %}
+            {% include 'includes/organisation_unit_add_modal.html' %}
+            {% include 'includes/organisation_unit_edit_modal.html' %}
+            {% include 'includes/workflow_add_modal.html' %}
+            {% include 'includes/workflow_edit_modal.html' %}
+            {% include 'includes/role_workflow_breakdown_add_modal.html' %}
+            {% include 'includes/role_workflow_breakdown_edit_modal.html' %}
             {% include 'includes/flash_message_modal.html' %}
+            {% include 'includes/reconciliation_file_details_modal.html' %}
          </div>
       </main>
    </body>

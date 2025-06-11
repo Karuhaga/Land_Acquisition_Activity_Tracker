@@ -93,7 +93,7 @@ def inject_pending_approvals_count():
 
 
 # Set session timeout duration
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=1)  # Change to your preferred timeout
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)  # Change to your preferred timeout
 
 
 # Ensure sessions are marked as permanent

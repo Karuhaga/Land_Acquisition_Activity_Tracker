@@ -62,6 +62,7 @@ main{
     transition: 0.5s ease;
     transition-property: left, width; /* Smooth transition for collapse */
     overflow-x: hidden; /* Prevent horizontal scroll */
+    padding-bottom: 100px;
 }
 #flashMessageModal {
     z-index: 11000; /* Higher than Bootstrap modals (default is 1050) */

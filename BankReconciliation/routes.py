@@ -1,8 +1,11 @@
 from BankReconciliation import app, os, allowed_file
 from BankReconciliation.models import (User, FileUploadBatch, FileUpload, FileDelete, BankAccount,
-                                       ReconciliationApprovals, WorkflowBreakdown, EmailHelper, Audit)
+                                       ReconciliationApprovals, WorkflowBreakdown, EmailHelper, Audit, UserSummary,
+                                       Role, UserRole, Currency, BankAccountResponsibleUser, OrganisationUnitTier,
+                                       OrganisationUnit, Workflow)
 from BankReconciliation.forms import LoginForm
 from flask import render_template, redirect, url_for, flash, request, jsonify, session, send_from_directory, abort
+import re
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -293,7 +296,6 @@ def submit_files():
         if not next_approvers:
             return jsonify({"error": "No next approver found"}), 500
 
-        # Send emails in the background
         # Send emails in the background with app context
         def send_emails():
             with app.app_context():  # Ensure Flask app context is available in the thread
@@ -308,6 +310,50 @@ def submit_files():
 
     except Exception as e:
         return jsonify({"error": str(e), "type": "danger"}), 500
+
+
+@app.route('/send_email_reminders', methods=['GET', 'POST'])
+def send_email_reminders():
+    with app.app_context():
+        initiators_pending_submission_of_reconciliations = FileUpload.initiators_pending_submission_of_reconciliations()
+
+        for initiator_id in initiators_pending_submission_of_reconciliations:
+            # Fetch initiator details
+            initiator_fname_email = FileUpload.get_user_fname_email(initiator_id)
+
+            if initiator_fname_email:
+                # Optionally get their pending reconciliations
+                pending_reconciliation_submission_details = FileUpload.pending_reconciliation_submission_details(
+                    initiator_id)
+                EmailHelper.email_reminder_to_initiator_reconciliations_pending_submission(initiator_fname_email["fname"],
+                                                                              initiator_fname_email["email"],
+                                                                              pending_reconciliation_submission_details)
+
+        next_approver_ids = FileUpload.get_next_approver_id(initiators_pending_submission_of_reconciliations)
+
+        for approver_id in next_approver_ids:
+            # Fetch initiator details
+            approver_fname_email = FileUpload.get_user_fname_email(approver_id)
+
+            if approver_fname_email:
+                # Optionally get their pending reconciliations
+                pending_reconciliation_submission_details_for_approver = FileUpload.pending_reconciliation_submission_details_for_approver(
+                    initiator_id)
+                EmailHelper.email_reminder_to_approver_reconciliations_pending_submission(approver_fname_email["fname"],
+                                                                              approver_fname_email["email"],
+                                                                              pending_reconciliation_submission_details_for_approver)
+
+        user_ids = FileUpload.get_all_user_ids()
+
+        for user_id in user_ids:
+            user_fname_email = FileUpload.get_user_fname_email(user_id)
+
+            if user_fname_email:
+                pending_approval_details = FileUpload.get_reconciliations_pending_approval(user_id)
+                if pending_approval_details:
+                    EmailHelper.email_reminder_to_approve_submitted_reconciliations(user_fname_email["fname"],
+                                                                                          user_fname_email["email"],
+                                                                                          pending_approval_details)
 
 
 @app.route('/submitted-reconciliations', methods=['GET', 'POST'])
@@ -552,6 +598,1046 @@ def report_reconciliations_pending_approval_page():
 def report_fully_approved_reconciliations_page():
     reconciliations = FileUpload.get_fully_approved_reconciliations_report()
     return render_template('report_fully_approved_reconciliations.html', reconciliations=reconciliations)
+
+
+@app.route('/admin-users', methods=['GET', 'POST'])
+@login_required
+@role_required(7,8,9,10)
+def admin_users_page():
+    user_details = UserSummary.get_all_users_details()
+    org_unit_tier = UserSummary.get_organisation_unit_tier()
+    # org_unit = UserSummary.get_organisation_units()
+    return render_template('users.html', user_details=user_details, org_unit_tier=org_unit_tier)
+
+
+@app.route('/get-organisation-units/<int:org_unit_tier_id>', methods=['GET', 'POST'])
+@login_required
+def get_organisation_units_by_tier(org_unit_tier_id):
+    org_unit = UserSummary.get_organisation_units_by_tier(org_unit_tier_id)
+    return jsonify([{'id': u.id, 'name': u.name} for u in org_unit])
+
+
+@app.route('/admin-register-new-user', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_user():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        username = data.get("username")
+        email = data.get("email")
+        fname = data.get("fname")
+        mname = data.get("mname") or ""
+        sname = data.get("sname")
+        password = data.get("password")
+        confirm_password = data.get("confirm_password")
+        org_unit_tier_id = data.get("organisationUnitTier")
+        org_unit_id = data.get("organisationUnit")
+
+        # Validate required fields
+        if not all([username, email, fname, sname, password, org_unit_tier_id, org_unit_id]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Validate password
+        if password != confirm_password:
+            return jsonify({"success": False, "message": "Passwords do not match."})
+
+        if not is_password_complex(password):
+            return jsonify({"success": False, "message": "Password does not meet complexity requirements."})
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = UserSummary.insert_new_user(
+            username=username,
+            email=email,
+            fname=fname,
+            mname=mname,
+            sname=sname,
+            password=password,
+            org_unit_tier_id=org_unit_tier_id,
+            org_unit_id=org_unit_id
+        )
+        if result:
+            return jsonify({"message": "User added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert user.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+def is_password_complex(password):
+    pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+=\[\]{};\'":\\|,.<>\/?]).{8,}$'
+    return re.match(pattern, password)
+
+
+@app.route('/admin-user-password-update', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_user_password_update():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        username = data.get("username")
+        password = data.get("password")
+        confirm_password = data.get("confirmPassword")
+
+        if password != confirm_password:
+            return jsonify({"success": False, "message": "Passwords do not match."})
+
+        if not is_password_complex(password):
+            return jsonify({"success": False, "message": "Password does not meet complexity requirements."})
+
+        # Validate required fields
+        if not all([username, password]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = UserSummary.update_user_password(
+            username=username,
+            password=password
+        )
+        if result:
+            return jsonify({"message": "User Password updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update user password.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-user', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_user():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        username = data.get("username")
+        email = data.get("email")
+        fname = data.get("fname")
+        mname = data.get("mname") or ""
+        sname = data.get("sname")
+        org_unit_tier_id = data.get("organisationUnitTier")
+        org_unit_id = data.get("organisationUnit")
+        is_active = int(data.get("is_active"))
+
+        # Validate required fields
+        required_fields = [username, email, fname, mname, sname, org_unit_tier_id, org_unit_id, is_active]
+        if any(field is None for field in required_fields):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = UserSummary.update_user(
+            username=username,
+            email=email,
+            fname=fname,
+            mname=mname,
+            sname=sname,
+            org_unit_tier_id=org_unit_tier_id,
+            org_unit_id=org_unit_id,
+            is_active=is_active
+        )
+        if result:
+            return jsonify({"message": "User updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update user.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/check-username/<string:username>', methods=['GET'])
+@login_required
+def check_username_exists(username):
+    exists = UserSummary.username_exists(username)
+    return jsonify({"exists": exists})
+
+
+@app.route("/get-user-account-details", methods=["GET"])
+def get_user_account_details():
+    username = request.args.get("user_name")
+    user_account_details = UserSummary.get_user_account_details(username)
+
+    if not user_account_details:
+        return jsonify({"error": "User not found"}), 404
+
+    user = user_account_details[0]
+    return jsonify(user)
+
+
+@app.route('/admin-roles', methods=['GET', 'POST'])
+@login_required
+@role_required(7,8,9,10)
+def admin_roles():
+    role_details = Role.get_all_role_details()
+    return render_template('roles.html', role_details=role_details)
+
+
+@app.route('/check-role-name/<string:rolename>', methods=['GET'])
+@login_required
+def check_role_name_exists(rolename):
+    exists = Role.role_name_exists(rolename)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-role', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_role():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        rolename = data.get("roleName", "").strip()
+
+        # Validate required fields
+        if not all([rolename]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Role.insert_new_role(role_name=rolename)
+        if result:
+            return jsonify({"message": "Role added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert role.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-role-details", methods=["GET"])
+def get_role_details():
+    role_name = request.args.get("role_name")
+    role_details = Role.get_role_details(role_name)
+
+    if not role_details:
+        return jsonify({"error": "Role not found"}), 404
+
+    role = role_details[0]
+
+    # Serialize manually
+    role_data = {
+        "id": role.id,
+        "role_name": role.name
+    }
+    return jsonify(role_data)
+
+
+@app.route('/admin-update-role', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_role():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        role_id = data.get("role_id")
+        role_name = data.get("role_name")
+
+        # Validate required fields
+        if not role_id or not role_name or role_name.strip() == "":
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Role.update_role(role_id, role_name)
+        if result:
+            return jsonify({"message": "Role updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update user.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-user-roles', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_user_roles_page():
+    user_role_details = UserRole.get_all_user_roles_details()
+
+    usernames = UserSummary.get_all_usernames()
+    # for user in usernames:
+    #     print(f"User ID: {user.id}, Username: {user.username}")
+
+    roles = Role.get_all_roles()
+    # for role in roles:
+    #     print(f"Role ID: {role.id}, Role Name: {role.name}")
+
+    return render_template(
+        'user_roles.html',
+        user_role_details=user_role_details,
+        usernames=usernames,
+        roles=roles
+    )
+
+
+@app.route('/check-user-role/<int:user_id>/<int:role_id>', methods=['GET'])
+@login_required
+def check_user_role_exists(user_id, role_id):
+    exists = UserRole.user_role_exists(user_id, role_id)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-user-role', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_user_role():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        user_id = data.get("user_id")
+        role_id = data.get("role_id")
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        # Validate required fields
+        if not all([user_id, role_id, start_date, end_date]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        result = UserRole.insert_new_user_role(
+            user_id=user_id,
+            role_id=role_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        if result:
+            return jsonify({"message": "User role added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert user role.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-user-role-id", methods=["GET"])
+def get_user_role_id():
+    user_name = request.args.get("username")
+    role_name = request.args.get("role_name")
+    user_role_id_details = UserRole.get_user_role_id(user_name, role_name)
+
+    if not user_role_id_details:
+        return jsonify({"error": "User-Role not found"}), 404
+
+    user_role_id = user_role_id_details[0]["id"]
+    return jsonify({"user_role_id": user_role_id})
+
+
+@app.route('/admin-update-user-role', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_user_role():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        user_role_id = data.get("user_role_id")
+        start_date = data.get("start_date")
+        expiry_date = data.get("end_date")
+
+        # Validate required fields
+        if not user_role_id or not start_date or expiry_date.strip() == "":
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = UserRole.update_user_role(user_role_id, start_date, expiry_date)
+        if result:
+            return jsonify({"message": "User-Role updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update User-Role.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-banks', methods=['GET', 'POST'])
+@login_required
+@role_required(7,8,9,10)
+def admin_banks():
+    bank_details = BankAccount.get_all_bank_details()
+    return render_template('banks.html', bank_details=bank_details)
+
+
+@app.route('/check-bank-name/<string:bankname>', methods=['GET'])
+@login_required
+def check_bank_name_exists(bankname):
+    exists = BankAccount.bank_name_exists(bankname)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-bank', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_bank():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        bankname = data.get("bankName", "").strip()
+
+        # Validate required fields
+        if not all([bankname]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = BankAccount.insert_new_bank(bank_name=bankname)
+
+        if result:
+            return jsonify({"message": "Bank added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert bank.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-bank-details", methods=["GET"])
+def get_bank_details():
+    bankname = request.args.get("bank_name")
+    bankdetails = BankAccount.get_bank_details(bankname)
+
+    if not bankdetails:
+        return jsonify({"error": "Bank not found"}), 404
+
+    bank = bankdetails[0]
+
+    # Serialize manually
+    bank_data = {
+        "id": bank.id,
+        "bankname": bank.name
+    }
+    return jsonify(bank_data)
+
+
+@app.route('/admin-update-bank', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_bank():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        bank_id = data.get("bank_id")
+        bank_name = data.get("bank_name")
+
+        # Validate required fields
+        if not bank_id or not bank_name or bank_name.strip() == "":
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = BankAccount.update_bank(bank_id, bank_name)
+        if result:
+            return jsonify({"message": "Bank updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update bank.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new bank:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-bank-accounts', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_bank_accounts():
+    bank_account_details = BankAccount.get_all_bank_account_details()
+    banks = BankAccount.get_all_bank_details()
+    currencies = Currency.get_all_currency_details()
+    org_units = UserSummary.get_organisation_units()
+    return render_template('bank_accounts.html', bank_account_details=bank_account_details,
+                           banks=banks, currencies=currencies, org_units=org_units)
+
+
+@app.route('/check-bank-account-name/<string:bankaccountname>', methods=['GET'])
+@login_required
+def check_bank_account_name_exists(bankaccountname):
+    exists = BankAccount.bank_account_name_exists(bankaccountname)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-bank-account', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_bank_account():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        bankAccountName = data.get("bankAccountName", "").strip()
+        bank_id = data.get("bank_id", "").strip()
+        currency_id = data.get("currency_id", "").strip()
+        org_unit_id = data.get("org_unit_id", "").strip()
+
+        # Validate required fields
+        if not all([bankAccountName, bank_id, currency_id, org_unit_id]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = BankAccount.insert_new_bank_account(bankAccountName, bank_id, currency_id, org_unit_id)
+
+        if result:
+            return jsonify({"message": "Bank Account added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert bank account.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-bank-account-details", methods=["GET"])
+def get_bank_account_details():
+    bank_account_name = request.args.get("bank_account_name")
+    bank_account_details = BankAccount.get_bank_account_details(bank_account_name)
+
+    if not bank_account_details:
+        return jsonify({"error": "User not found"}), 404
+
+    bank_accounts = bank_account_details[0]
+    return jsonify(bank_accounts)
+
+
+@app.route('/admin-update-bank-account', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_bank_account():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        bank_acc_id = data.get("bank_acc_id")
+        bank_id = data.get("bank_id")
+        currency_id = data.get("currency_id")
+        org_unit_id = data.get("org_unit_id")
+        creation_date = data.get("creation_date")
+
+        # Validate required fields
+        if not bank_acc_id or not bank_id or not currency_id or not org_unit_id or not creation_date:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = BankAccount.update_bank_account(bank_acc_id, bank_id, currency_id, org_unit_id, creation_date)
+        if result:
+            return jsonify({"message": "Bank account updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update bank account.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new bank:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-currencies', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_currencies():
+    currency_details = Currency.get_all_currency_details()
+    return render_template('currencies.html', currency_details=currency_details)
+
+
+@app.route('/check-currency-name/<string:currencyName>', methods=['GET'])
+@login_required
+def check_currency_name_exists(currencyName):
+    exists = Currency.currency_name_exists(currencyName)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-currency', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_currency():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        currencyname = data.get("currencyName", "").strip()
+        currencycode = data.get("codeName", "").strip()
+
+        # Validate required fields
+        if not all([currencyname]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Currency.insert_new_currency(currency_name=currencyname, currency_code=currencycode)
+        if result:
+            return jsonify({"message": "Currency added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert currency.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-currency-details", methods=["GET"])
+def get_currency_details():
+    currency_name = request.args.get("currency_name")
+    currency_details = Currency.get_currency_details(currency_name)
+
+    if not currency_details:
+        return jsonify({"error": "Role not found"}), 404
+
+    currency = currency_details[0]
+
+    # Serialize manually
+    currency_data = {
+        "id": currency.id,
+        "currency_name": currency.name,
+        "currency_code": currency.code
+    }
+
+    return jsonify(currency_data)
+
+
+@app.route('/admin-update-currency', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_currency():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        currency_id = data.get("currency_id")
+        currency_name = data.get("currency_name")
+        currency_code = data.get("currency_code")
+
+        # Validate required fields
+        if not currency_id or not currency_name or currency_name.strip() == "" or not currency_code or currency_code.strip() == "":
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Currency.update_currency(currency_id, currency_name, currency_code)
+        if result:
+            return jsonify({"message": "Currency updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update currency.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-bank-account-responsible-user', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_bank_account_responsible_user():
+    bank_account_responsible_user_details = BankAccountResponsibleUser.get_all_bank_responsible_person_details()
+    bank_accounts = BankAccount.get_all_bank_account_details()
+    usernames = UserSummary.get_all_usernames()
+    return render_template('bank_account_responsible_user.html',
+                           bank_account_responsible_user_details=bank_account_responsible_user_details,
+                           bank_accounts=bank_accounts, usernames=usernames)
+
+
+@app.route('/check-bank-account-responsibility-role/<int:bankAccId>/<int:userId>', methods=['GET'])
+@login_required
+def check_bank_account_responsibility_role_exists(bankAccId, userId):
+    exists = BankAccountResponsibleUser.bank_account_responsibility_exists(bankAccId, userId)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-bank-account-responsibility', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_bank_account_responsibility():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        bank_acc_id = data.get("bankAccId")
+        user_id = data.get("userId")
+
+        # Validate required fields
+        if not all([bank_acc_id, user_id]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        result = BankAccountResponsibleUser.insert_new_bank_account_responsibility(
+            bank_acc_id=bank_acc_id,
+            user_id=user_id
+        )
+        if result:
+            return jsonify({"message": "Bank Account responsibility added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert Bank Account responsibility.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route("/get-bank-account-responsibility-details", methods=["GET"])
+def get_bank_account_responsibility_details():
+    bank_account_name = request.args.get("bank_account_name")
+    username = request.args.get("username")
+    bank_acc_responsibility_details = BankAccountResponsibleUser.get_bank_account_responsibility_details(bank_account_name, username)
+
+    if not bank_acc_responsibility_details:
+        return jsonify({"error": "Bank Account responsibility not found"}), 404
+
+    responsibility = bank_acc_responsibility_details[0]
+
+    # Serialize manually
+    responsibility_data = {
+        "id": responsibility.id,
+        "bank_account_id": responsibility.bank_account_id,
+        "user_id": responsibility.user_id,
+        "is_active": responsibility.is_active
+    }
+
+    return jsonify(responsibility_data)
+
+
+@app.route('/admin-update-bank-account-responsibility', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_bank_account_responsibility():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        responsibility_id = data.get("responsibility_id")
+        bank_acc_id = data.get("bank_acc_id")
+        user_id = data.get("user_id")
+        is_active = int(data.get("is_active"))
+
+        # Validate required fields
+        if responsibility_id is None or bank_acc_id is None or user_id is None or is_active is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = BankAccountResponsibleUser.update_bank_account_responsibility(responsibility_id, bank_acc_id, user_id, is_active)
+        if result:
+            return jsonify({"message": "Bank Account Responsibility updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update Bank Account Responsibility.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-organisation-unit-tier', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_organisation_unit_tier():
+    unit_tier_details = OrganisationUnitTier.get_all_org_unit_tier_details()
+    return render_template('organisation_unit_tier.html', unit_tier_details=unit_tier_details)
+
+
+@app.route('/check-org-unit-tier-name/<string:unit_tier_name>', methods=['GET'])
+@login_required
+def check_unit_tier_name_exists(unit_tier_name):
+    exists = OrganisationUnitTier.org_unit_name_exists(unit_tier_name)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-org-unit-tier', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_org_unit_tier():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        unit_tier_name = data.get("unit_tier_name", "").strip()
+        parent_unit_tier = data.get("parent_unit_tier", "").strip()
+
+        # Validate required fields
+        if unit_tier_name is None or parent_unit_tier is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = OrganisationUnitTier.insert_new_org_unit_tier(unit_tier_name=unit_tier_name, parent_unit_tier=parent_unit_tier)
+        if result:
+            return jsonify({"message": "Organisation Unit Tier added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert Organisation Unit Tier.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-org-unit-tier', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_org_unit_tier():
+
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        org_unit_tier_id = data.get("org_unit_tier_id")
+        org_unit_tier_name = data.get("org_unit_tier_name")
+        parent_org_unit_tier_id = data.get("parent_org_unit_tier_id")
+
+        # Validate required fields
+        if org_unit_tier_id is None or org_unit_tier_name is None or parent_org_unit_tier_id is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = OrganisationUnitTier.update_org_unit_tier(org_unit_tier_id, org_unit_tier_name, parent_org_unit_tier_id)
+        if result:
+            return jsonify({"message": "Organisation Unit Tier updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update Organisation Unit Tier.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/check-org-unit-tier/<string:org_unit_tier_name>/<int:parent_org_unit_tier_id>', methods=['GET'])
+@login_required
+def check_org_unit_tier_exists(org_unit_tier_name, parent_org_unit_tier_id):
+    exists = OrganisationUnitTier.org_unit_tier_exists(org_unit_tier_name, parent_org_unit_tier_id)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-organisation-unit', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_organisation_unit():
+    unit_details = OrganisationUnit.get_all_org_unit_details()
+    unit_tier_details = OrganisationUnitTier.get_all_org_unit_tier_details()
+    return render_template('organisation_unit.html', unit_details=unit_details, unit_tier_details=unit_tier_details)
+
+
+@app.route('/check-org-unit-name/<string:unit_name>', methods=['GET'])
+@login_required
+def check_unit_name_exists(unit_name):
+    exists = OrganisationUnit.org_unit_name_exists(unit_name)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-org-unit', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_org_unit():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        unit_name = data.get("unit_name", "").strip()
+        parent_unit = data.get("parent_unit", "").strip()
+        unit_tier = data.get("unit_tier", "").strip()
+
+        print(unit_tier)
+
+        # Validate required fields
+        if unit_name is None or parent_unit is None or unit_tier is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = OrganisationUnit.insert_new_org_unit(unit_name=unit_name, parent_unit=parent_unit, unit_tier=unit_tier)
+        if result:
+            return jsonify({"message": "Organisation Unit added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert Organisation Unit.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-org-unit', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_org_unit():
+
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        org_unit_id = data.get("org_unit_id")
+        org_unit_name = data.get("org_unit_name")
+        parent_unit_id = data.get("parent_unit_id")
+        org_unit_tier_id = data.get("org_unit_tier_id")
+
+        # Validate required fields
+        if org_unit_id is None or org_unit_name is None or parent_unit_id is None or org_unit_tier_id is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = OrganisationUnit.update_org_unit(org_unit_id, org_unit_name, parent_unit_id, org_unit_tier_id)
+        if result:
+            return jsonify({"message": "Organisation Unit updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update Organisation Unit.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/check-org-unit/<string:org_unit_name>/<int:parent_unit_id>/<int:org_unit_tier_id>', methods=['GET'])
+@login_required
+def check_unit_exists(org_unit_name, parent_unit_id, org_unit_tier_id):
+    exists = OrganisationUnit.check_unit_exists(org_unit_name, parent_unit_id, org_unit_tier_id)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-workflows', methods=['GET', 'POST'])
+@login_required
+@role_required(7,8,9,10)
+def admin_workflows_page():
+    workflow_details = Workflow.get_all_workflow_details()
+    return render_template('workflows.html', workflow_details=workflow_details)
+
+
+@app.route('/check-workflow-name/<string:workflowName>', methods=['GET'])
+@login_required
+def check_workflow_name_exists(workflowName):
+    exists = Workflow.workflow_name_exists(workflowName)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-workflow', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_workflow():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        workflowName = data.get("workflowName", "").strip()
+
+        # Validate required fields
+        if not all([workflowName]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Workflow.insert_new_workflow(workflow_name=workflowName)
+        if result:
+            return jsonify({"message": "Workflow added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert workflow.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-workflows', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_workflows():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        workflow_id = data.get("workflow_id")
+        workflow_name = data.get("workflow_name")
+
+        # Validate required fields
+        if workflow_id is None or workflow_name is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Workflow.update_workflow(workflow_id, workflow_name)
+        if result:
+            return jsonify({"message": "Workflow updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update workflow.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-workflow-breakdown', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_workflow_breakdown():
+    unit_details = OrganisationUnit.get_all_org_unit_details()
+    unit_tier_details = OrganisationUnitTier.get_all_org_unit_tier_details()
+    return render_template('workflow_breakdown.html',
+                           unit_details=unit_details, unit_tier_details=unit_tier_details)
+
+
+@app.route('/admin-role-workflow-breakdown', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_role_workflow_breakdown():
+    role_workflow_breakdown_details = Workflow.get_all_role_workflow_breakdown_details()
+    role_details = Role.get_all_role_details()
+    workflow_breakdown_details = Workflow.get_all_workflow_breakdown_details()
+    return render_template('role_workflow_breakdown.html',
+                           role_workflow_breakdown_details=role_workflow_breakdown_details, role_details=role_details,
+                           workflow_breakdown_details=workflow_breakdown_details)
+
+
+@app.route('/check-role-workflow-breakdown/<int:role_id>/<int:workflow_breakdown_id>', methods=['GET'])
+@login_required
+def check_role_workflow_breakdown_exists(role_id, workflow_breakdown_id):
+    exists = Workflow.check_role_workflow_breakdown_exists(role_id, workflow_breakdown_id)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-role-workflow-breakdown', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_role_workflow_breakdown():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        role_id = data.get("role_id", "").strip()
+        workflow_breakdown_id = data.get("workflow_breakdown_id", "").strip()
+
+        # Validate required fields
+        if role_id is None or workflow_breakdown_id is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Workflow.insert_new_role_workflow_breakdown(role_id, workflow_breakdown_id)
+        if result:
+            return jsonify({"message": "Breakdown added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert breakdown.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-role-workflow-breakdown-role', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_role_workflow_breakdown_role():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        role_workflow_breakdown_id = data.get("role_workflow_breakdown_id")
+        role_id = data.get("role_role_workflow_breakdown_id")
+        workflow_breakdown_id = data.get("workflow_role_workflow_breakdown_id")
+
+        # Validate required fields
+        if role_workflow_breakdown_id is None or role_id is None or workflow_breakdown_id is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = Workflow.update_role_workflow_breakdown(role_workflow_breakdown_id, role_id, workflow_breakdown_id)
+        if result:
+            return jsonify({"message": "Role updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update user.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
 
 
 @app.route('/logout')

@@ -9,7 +9,6 @@ from BankReconciliation.database import get_db_connection
 from BankReconciliation import mail  # Import mail from __init__.py
 from flask_mail import Message
 
-
 bcrypt = Bcrypt(app)  # Initialize bcrypt
 
 
@@ -39,7 +38,9 @@ class User(UserMixin):
         cursor = conn.cursor()
 
         try:
-            cursor.execute("SELECT r.name FROM role r INNER JOIN user_role ur ON r.id = ur.role_id WHERE ur.user_id = ?", (self.id,))
+            cursor.execute(
+                "SELECT r.name FROM role r INNER JOIN user_role ur ON r.id = ur.role_id WHERE ur.user_id = ?",
+                (self.id,))
             return [row[0] for row in cursor.fetchall()]  # Return a list of role names
         except Exception as e:
             print("Database error:", e)
@@ -78,7 +79,8 @@ class User(UserMixin):
                            (username,))
             row = cursor.fetchone()
             if row:
-                return User(row.id, row.username, row.fname, row.mname, row.sname, row.password, row.email) # Create a User object
+                return User(row.id, row.username, row.fname, row.mname, row.sname, row.password,
+                            row.email)  # Create a User object
             return None
         except Exception as e:
             print("Database error:", e)
@@ -104,13 +106,319 @@ class User(UserMixin):
         )
 
 
+class UserSummary:
+    def __init__(self, id=None, username=None, name=None, email_address=None, email=None, organisation_unit_tier_name=None, organisation_unit_name=None, status=None, fname=None, mname=None, sname=None, password=None, is_active=None):
+        self.id = id
+        self.username = username
+        self.name = name
+        self.email_address = email_address
+        self.email = email
+        self.organisation_unit_tier_name = organisation_unit_tier_name
+        self.organisation_unit_name = organisation_unit_name
+        self.status = status
+        self.fname = fname
+        self.mname = mname
+        self.sname = sname
+        self.password = password
+        self.is_active = is_active
+
+    @staticmethod
+    def get_all_users_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT 
+                            Username AS username, 
+                            LTRIM(RTRIM(COALESCE(u.Fname + ' ' + u.Mname + ' ' + u.Sname, ''))) AS name, 
+                            Email AS email_address, 
+                            out.name AS organisation_unit_tier_name, 
+                            ou.name AS organisation_unit_name,
+                            CASE 
+                                WHEN u.is_active = 1 THEN 'Active' 
+                                ELSE 'Disabled' 
+                            END AS status
+                        FROM users u 
+                        LEFT OUTER JOIN organisation_unit ou ON u.organisation_unit_id = ou.id
+                        LEFT OUTER JOIN organisation_unit_tier out ON u.organisation_unit_tier_id = out.id
+                        ORDER BY u.Username;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            user_details = [
+                UserSummary(username=row.username, name=row.name, email_address=row.email_address, organisation_unit_tier_name=row.organisation_unit_tier_name, organisation_unit_name=row.organisation_unit_name, status=row.status)
+                for row in result
+            ]
+            return user_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_organisation_unit_tier():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                SELECT id, name FROM organisation_unit_tier ORDER BY name
+            """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            org_unit = [
+                UserSummary(id=row.id, name=row.name)
+                for row in result
+            ]
+            return org_unit
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_organisation_units():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                SELECT id, name FROM organisation_unit ORDER BY name
+            """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            org_unit = [
+                UserSummary(id=row.id, name=row.name)
+                for row in result
+            ]
+            return org_unit
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_organisation_units_by_tier(org_unit_tier_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                SELECT id, name FROM organisation_unit WHERE org_unit_tier_id = ? ORDER BY name
+            """
+            cursor.execute(query, (org_unit_tier_id,))
+            result = cursor.fetchall()
+
+            org_unit = [
+                UserSummary(id=row.id, name=row.name)
+                for row in result
+            ]
+            return org_unit
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_user(username, email, fname, mname, sname, password, org_unit_tier_id, org_unit_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
+            query = """
+                INSERT INTO users (username, fname, mname, sname, password, email, organisation_unit_id, organisation_unit_tier_id, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            cursor.execute(query, (username, fname, mname, sname, password_hash, email, org_unit_id, org_unit_tier_id, 1))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_user(username, email, fname, mname, sname, org_unit_tier_id, org_unit_id, is_active):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE users
+                SET fname = ?, mname = ?, sname = ?, email = ?, organisation_unit_id = ?, organisation_unit_tier_id = ?, is_active = ?
+                WHERE username = ?
+            """
+            cursor.execute(query, (fname, mname, sname, email, org_unit_id, org_unit_tier_id, is_active, username))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def username_exists(username):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM users WHERE username = ?"
+            cursor.execute(query, (username,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check username existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_user_account_details(username):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT username, fname, mname, sname, email, out.name AS organisation_unit_tier_name, ou.name AS organisation_unit_name, is_active 
+                        FROM users u
+                        LEFT OUTER JOIN organisation_unit ou ON u.organisation_unit_id = ou.id
+                        LEFT OUTER JOIN organisation_unit_tier out ON u.organisation_unit_tier_id = out.id
+                        WHERE Username = ?
+                    """
+            cursor.execute(query, (username,))
+            result = cursor.fetchall()
+
+            user_details = [
+                {
+                    "username": row.username,
+                    "fname": row.fname,
+                    "mname": row.mname,
+                    "sname": row.sname,
+                    "email": row.email,
+                    "organisation_unit_tier_name": row.organisation_unit_tier_name,
+                    "organisation_unit_name": row.organisation_unit_name,
+                    "is_active": row.is_active
+                }
+                for row in result
+            ]
+
+            return user_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_user_password(username, password):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+            query = """
+                UPDATE users SET password = ? WHERE username = ?
+            """
+            cursor.execute(query, (password, username))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user password: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_usernames():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, username FROM users ORDER BY username
+            """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            usernames = [
+                UserSummary(id=row.id, username=row.username)
+                for row in result
+            ]
+            return usernames
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+
 class EmailHelper(UserMixin):
     def __init__(self):
         self.id = id
 
     @staticmethod
     def send_submitted_reconciliations_email(current_fname, next_approver_email, next_approver_fname, files):
-        subject = "Bank Reconciliations Submitted for Approval"
+        subject = "Bank Reconwiliations Submitted for Approval"
 
         # Email body with Poppins font and inline styles
         body = f"""
@@ -304,6 +612,206 @@ class EmailHelper(UserMixin):
             msg.html = body  # Set HTML content
             mail.send(msg)
             print(f"Email of approval sent to {initiator_approver_email}")
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
+    @staticmethod
+    def email_reminder_to_initiator_reconciliations_pending_submission(current_fname, initiator_approver_email, details):
+        subject = "Bank Reconciliations Pending Submission"
+
+        # Email body with Poppins font and inline styles
+        body = f"""
+        <html>
+        <head>
+            <link href="https:get_reconciliations_pending_submission/fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+        </head>
+        <body style="font-family: 'Poppins', sans-serif; margin: 20px; color: #333;">
+            <p style="font-size: 14px;">Dear {current_fname},</p>
+            <p style="font-size: 14px;">The following reconciliations are pending your submission.</p>
+
+            <p style="font-size: 14px; font-weight: bold; margin-top: 25px;">Reconciliations Pending Submission:</p>
+
+            <table border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="border: 1px solid #ddd; text-align: center; padding: 8px;">#</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Bank Account</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Year</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Month</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+
+        for index, detail in enumerate(details, start=1):
+            body += f"""
+                    <tr>
+                        <td style="border: 1px solid #ddd; text-align: center; padding: 8px;">{index}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.bank_account}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.year}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.month}</td>
+                    </tr>
+            """
+
+        body += """
+                </tbody>
+            </table>
+
+            <p style="margin-top: 25px; margin-bottom: 25px;">
+                🔗 <a href="http://127.0.0.1:5000/submit-reconciliations" 
+                style="color: #4270a8; text-decoration: none; font-weight: 600;">Click here to submit</a>
+            </p>
+
+            <p style="font-size: 14px;">Your timely action is appreciated.</p>
+
+            <p style="font-size: 14px;">
+                <strong>Best Regards,</strong><br>
+                Bank Reconciliation Tracker<br>
+                📧 support@yourcompany.com | ☎️ +256 [Your Contact Number]
+            </p>
+        </body>
+        </html>
+        """
+
+        try:
+            msg = Message(subject, recipients=[initiator_approver_email])
+            msg.html = body  # Set HTML content
+            mail.send(msg)
+            print(f"Email reminder about Pending Reconciliation(s) Submission sent to Initiator, {initiator_approver_email}")
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
+    @staticmethod
+    def email_reminder_to_approver_reconciliations_pending_submission(approver_fname, approver_email, details):
+        subject = "Bank Reconciliations Pending Submission"
+
+        # Email body with Poppins font and inline styles
+        body = f"""
+        <html>
+        <head>
+            <link href="https:get_reconciliations_pending_submission/fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+        </head>
+        <body style="font-family: 'Poppins', sans-serif; margin: 20px; color: #333;">
+            <p style="font-size: 14px;">Dear {approver_fname},</p>
+            <p style="font-size: 14px;">The following reconciliations are pending submission.</p>
+
+            <p style="font-size: 14px; font-weight: bold; margin-top: 25px;">Reconciliations Pending Submission:</p>
+
+            <table border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="border: 1px solid #ddd; text-align: center; padding: 8px;">#</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Bank Account</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Year</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Month</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Responsible Person(s)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+
+        for index, detail in enumerate(details, start=1):
+            body += f"""
+                    <tr>
+                        <td style="border: 1px solid #ddd; text-align: center; padding: 8px;">{index}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.bank_account}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.year}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.month}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.responsible_users}</td>
+                    </tr>
+            """
+
+        body += """
+                </tbody>
+            </table>
+
+            <p style="margin-top: 25px; margin-bottom: 25px;">
+                🔗 <a href="http://127.0.0.1:5000/report-reconciliations-pending-submission" 
+                style="color: #4270a8; text-decoration: none; font-weight: 600;">Click here to view report on reconciliations pending submission</a>
+            </p>
+
+            <p style="font-size: 14px;">Your timely action is appreciated.</p>
+
+            <p style="font-size: 14px;">
+                <strong>Best Regards,</strong><br>
+                Bank Reconciliation Tracker<br>
+                📧 support@yourcompany.com | ☎️ +256 [Your Contact Number]
+            </p>
+        </body>
+        </html>
+        """
+
+        try:
+            msg = Message(subject, recipients=[approver_email])
+            msg.html = body  # Set HTML content
+            mail.send(msg)
+            print(f"Email reminder about Pending Reconciliation(s) Submission sent to Supervisor, {approver_email}")
+        except Exception as e:
+            print(f"Error sending email: {e}")
+
+    @staticmethod
+    def email_reminder_to_approve_submitted_reconciliations(approver_fname, approver_email, details):
+        subject = "Bank Reconciliations Pending Approval"
+
+        # Email body with Poppins font and inline styles
+        body = f"""
+        <html>
+        <head>
+            <link href="https:get_reconciliations_pending_submission/fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+        </head>
+        <body style="font-family: 'Poppins', sans-serif; margin: 20px; color: #333;">
+            <p style="font-size: 14px;">Dear {approver_fname},</p>
+            <p style="font-size: 14px;">The following reconciliations are pending your approval.</p>
+
+            <p style="font-size: 14px; font-weight: bold; margin-top: 25px;">Reconciliations Pending Approval:</p>
+
+            <table border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="border: 1px solid #ddd; text-align: center; padding: 8px;">#</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Bank Account</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Year</th>
+                        <th style="border: 1px solid #ddd; text-align: left; padding: 8px;">Month</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+
+        for index, detail in enumerate(details, start=1):
+            body += f"""
+                    <tr>
+                        <td style="border: 1px solid #ddd; text-align: center; padding: 8px;">{index}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.bank_account}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.year}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{detail.month}</td>
+                    </tr>
+            """
+
+        body += """
+                </tbody>
+            </table>
+
+            <p style="margin-top: 25px; margin-bottom: 25px;">
+                🔗 <a href="http://127.0.0.1:5000/approve-reconciliations" 
+                style="color: #4270a8; text-decoration: none; font-weight: 600;">Click here to review and approve reconciliation(s)</a>
+            </p>
+
+            <p style="font-size: 14px;">Your timely action is appreciated.</p>
+
+            <p style="font-size: 14px;">
+                <strong>Best Regards,</strong><br>
+                Bank Reconciliation Tracker<br>
+                📧 support@yourcompany.com | ☎️ +256 [Your Contact Number]
+            </p>
+        </body>
+        </html>
+        """
+
+        try:
+            msg = Message(subject, recipients=[approver_email])
+            msg.html = body  # Set HTML content
+            mail.send(msg)
+            print(f"Email reminder about Pending Reconciliation(s) Approval sent to Approver, {approver_email}")
         except Exception as e:
             print(f"Error sending email: {e}")
 
@@ -627,8 +1135,11 @@ class FileUploadBatch:
 
 
 class FileUpload:
-    def __init__(self, id=None, bank_account=None, year=None, month=None, batch_id=None, file_name=None, date_time=None, approve_as=None, responsible_users=None, next_approver=None, status=None):
+    def __init__(self, id=None, ID=None, bank_account=None, year=None, month=None, batch_id=None, file_name=None,
+                 date_time=None, approve_as=None, responsible_users=None, next_approver=None, status=None, email=None,
+                 fname=None):
         self.id = id
+        self.ID = ID
         self.bank_account = bank_account
         self.year = year
         self.month = month
@@ -639,6 +1150,8 @@ class FileUpload:
         self.responsible_users = responsible_users
         self.next_approver = next_approver
         self.status = status
+        self.email = email
+        self.fname = fname
 
     @staticmethod
     def insert_into_file_upload(batch_id, file_name, bank_account, year, month):
@@ -1158,14 +1671,12 @@ class FileUpload:
             query = """
                DECLARE @logged_in_user_id INT = ?; -- Set logged-in user's ID
 
-                WITH GlobalFiles AS (
+                ;WITH GlobalFiles AS (
                     -- Get files where responsibility is global
                     SELECT 
-                        f.id, 
-                        ba.name AS bank_account_name, 
+                        ba.name AS bank_account, 
                         f.year, 
                         DATENAME(month, DATEADD(month, f.month, 0) - 1) AS month,
-                        f.batch_id, 
                         f.file_name, 
                         FORMAT(f.creation_datetime, 'yyyy-MM-dd HH:mm:ss') AS date_time, 
                         (SELECT TOP 1 r.name 
@@ -1204,11 +1715,9 @@ class FileUpload:
                 OrgBasedFiles AS (
                     -- Get files where responsibility is restricted to specific organizational units
                     SELECT 
-                        f.id, 
-                        ba.name AS bank_account_name, 
+                        ba.name AS bank_account, 
                         f.year, 
                         DATENAME(month, DATEADD(month, f.month, 0) - 1) AS month,
-                        f.batch_id, 
                         f.file_name, 
                         FORMAT(f.creation_datetime, 'yyyy-MM-dd HH:mm:ss') AS date_time,
                         (SELECT TOP 1 r.name 
@@ -1246,20 +1755,23 @@ class FileUpload:
                     )
                     
                     -- Combine results and order by bank_name, year, month
-                    SELECT id, bank_account_name, year, month, batch_id, file_name, date_time, approve_as
+                    SELECT bank_account, year, month, file_name, date_time, approve_as
                     FROM (
                         SELECT * FROM GlobalFiles WHERE row_num = 1
                         UNION
                         SELECT * FROM OrgBasedFiles WHERE row_num = 1
                     ) AS UniqueResults
-                    ORDER BY bank_account_name, year, month ASC;
+                    ORDER BY bank_account, year, month ASC;
             """
             cursor.execute(query, (user_id,))
             result = cursor.fetchall()
 
-            # Convert query result into list of Reconciliation objects
-            reconciliations = [FileUpload(row.id, row.bank_account_name, row.year, row.month, row.batch_id,
-                                          row.file_name, row.date_time, row.approve_as) for row in result]
+            reconciliations = [
+                FileUpload(bank_account=row.bank_account, year=row.year, month=row.month,
+                           file_name=row.file_name, date_time=row.date_time, approve_as=row.approve_as)
+                for row in result
+            ]
+
             return reconciliations
         except Exception as e:
             print("Database error:", e)
@@ -1281,7 +1793,7 @@ class FileUpload:
                 DECLARE @logged_in_user_id INT = ?;
 
                 WITH GlobalFiles AS (
-                    SELECT f.id
+                    SELECT DISTINCT(f.id)
                     FROM file_upload f
                     JOIN reconciliation_approvals ra ON f.id = ra.file_upload_id
                     JOIN file_upload_batch fub ON f.batch_id = fub.id
@@ -1312,7 +1824,7 @@ class FileUpload:
                     )
                 ),
                 OrgBasedFiles AS (
-                    SELECT f.id
+                    SELECT DISTINCT(f.id)
                     FROM file_upload f
                     JOIN reconciliation_approvals ra ON f.id = ra.file_upload_id
                     JOIN file_upload_batch fub ON f.batch_id = fub.id
@@ -1621,6 +2133,415 @@ class FileUpload:
             cursor.close()
             conn.close()
 
+    @staticmethod
+    def initiators_pending_submission_of_reconciliations():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        WITH MonthList AS (
+                            SELECT 
+                                ba.id AS bank_account_id,
+                                DATEFROMPARTS(YEAR(ba.creation_date), MONTH(ba.creation_date), 1) AS start_month
+                            FROM 
+                                bank_account ba
+                        ), AllMonths AS (
+                            SELECT 
+                                ml.bank_account_id,
+                                ml.start_month AS recon_month
+                            FROM 
+                                MonthList ml
+                            UNION ALL
+                            SELECT 
+                                am.bank_account_id,
+                                DATEADD(MONTH, 1, am.recon_month)
+                            FROM 
+                                AllMonths am
+                            WHERE 
+                                am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)
+                        )
+                        SELECT DISTINCT
+                            u.ID
+                        FROM 
+                            AllMonths am
+                        LEFT JOIN 
+                            file_upload f ON f.bank_account_id = am.bank_account_id 
+                                           AND f.year = YEAR(am.recon_month)
+                                           AND f.month = MONTH(am.recon_month)
+                                           AND f.removed_by_user_on_upload_page = 0
+                        INNER JOIN 
+                            bank_account c ON am.bank_account_id = c.id
+                        LEFT JOIN 
+                            bank_account_responsible_user bru ON bru.bank_account_id = c.id
+                        LEFT JOIN 
+                            users u ON bru.user_id = u.ID
+                        WHERE 
+                            f.id IS NULL -- Means missing reconciliation
+                            AND am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)
+                            AND u.ID IS NOT NULL
+                        OPTION (MAXRECURSION 1000);
+                  """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            return [row.ID for row in result]
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_user_fname_email(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        DECLARE @UserID INT = ?;
+
+                        SELECT fname, email FROM users WHERE ID = @UserID
+                  """
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchone()
+
+            if result:
+                return {"fname": result.fname, "email": result.email}
+            else:
+                return {}
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_user_ids():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT ID FROM users ORDER BY ID
+                  """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            ids = [row[0] for row in result]
+
+            return ids
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def pending_reconciliation_submission_details(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                    DECLARE @UserID INT = ?;
+                    
+                    WITH MonthList AS (
+                        SELECT 
+                            ba.id AS bank_account_id,
+                            ba.name AS bank_account,
+                            DATEFROMPARTS(YEAR(ba.creation_date), MONTH(ba.creation_date), 1) AS start_month
+                        FROM 
+                            bank_account ba
+                    ), AllMonths AS (
+                        SELECT 
+                            ml.bank_account_id,
+                            ml.bank_account,
+                            ml.start_month AS recon_month
+                        FROM 
+                            MonthList ml
+                        UNION ALL
+                        SELECT 
+                            am.bank_account_id,
+                            am.bank_account,
+                            DATEADD(MONTH, 1, am.recon_month)
+                        FROM 
+                            AllMonths am
+                        WHERE 
+                            am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)
+                    )
+                    SELECT 
+                        c.name AS bank_account,
+                        YEAR(am.recon_month) AS year,
+                        DATENAME(month, am.recon_month) AS month
+                    FROM 
+                        AllMonths am
+                    LEFT JOIN 
+                        file_upload f ON f.bank_account_id = am.bank_account_id 
+                                       AND f.year = YEAR(am.recon_month)
+                                       AND f.month = MONTH(am.recon_month)
+                                       AND f.removed_by_user_on_upload_page = 0
+                    INNER JOIN 
+                        bank_account c ON am.bank_account_id = c.id
+                    LEFT JOIN 
+                        bank_account_responsible_user bru ON bru.bank_account_id = c.id
+                    LEFT JOIN 
+                        users u ON bru.user_id = u.ID
+                    WHERE 
+                        f.id IS NULL -- Missing reconciliation
+                        AND am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) -- Exclude current month
+                        AND u.ID = @UserID -- <<< ADD YOUR USER ID FILTER HERE
+                    GROUP BY 
+                        c.name,
+                        YEAR(am.recon_month),
+                        DATENAME(month, am.recon_month)
+                    ORDER BY 
+                        c.name, year, 
+                        MIN(MONTH(am.recon_month))
+                    OPTION (MAXRECURSION 1000);
+                  """
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            reconciliations = [
+                FileUpload(
+                    bank_account=row.bank_account,
+                    year=row.year,
+                    month=row.month
+                )
+                for row in result
+            ]
+            return reconciliations
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def pending_reconciliation_submission_details_for_approver(user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                    DECLARE @logged_in_user_id INT = ?;
+                    DECLARE @is_global_responsibility BIT = 0;
+                    
+                    WITH MonthList AS (
+                        SELECT 
+                            ba.id AS bank_account_id,
+                            ba.name AS bank_account,
+                            DATEFROMPARTS(YEAR(ba.creation_date), MONTH(ba.creation_date), 1) AS start_month
+                        FROM 
+                            bank_account ba
+                    ), AllMonths AS (
+                        SELECT 
+                            ml.bank_account_id,
+                            ml.bank_account,
+                            ml.start_month AS recon_month
+                        FROM 
+                            MonthList ml
+                        
+                        UNION ALL
+                        
+                        SELECT 
+                            am.bank_account_id,
+                            am.bank_account,
+                            DATEADD(MONTH, 1, am.recon_month)
+                        FROM 
+                            AllMonths am
+                        WHERE 
+                            am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)
+                    )
+                    SELECT 
+                        c.name AS bank_account,
+                        YEAR(am.recon_month) AS year,
+                        DATENAME(month, am.recon_month) AS month,
+                        STRING_AGG(
+                            LTRIM(RTRIM(
+                                COALESCE(u.Fname, '') + 
+                                CASE WHEN u.Mname IS NOT NULL AND u.Mname <> '' THEN ' ' + u.Mname ELSE '' END + 
+                                CASE WHEN u.Sname IS NOT NULL AND u.Sname <> '' THEN ' ' + u.Sname ELSE '' END
+                            )),
+                            ', '
+                        ) AS responsible_users
+                    FROM 
+                        AllMonths am
+                    LEFT JOIN 
+                        file_upload f ON f.bank_account_id = am.bank_account_id 
+                                       AND f.year = YEAR(am.recon_month)
+                                       AND f.month = MONTH(am.recon_month)
+                                       AND f.removed_by_user_on_upload_page = 0
+                    INNER JOIN 
+                        bank_account c ON am.bank_account_id = c.id
+                    LEFT JOIN 
+                        bank_account_responsible_user bru ON bru.bank_account_id = c.id
+                    LEFT JOIN 
+                        users u ON bru.user_id = u.ID
+                    WHERE 
+                        f.id IS NULL
+                        AND am.recon_month < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) 
+                        AND (
+                            (@is_global_responsibility = 0 AND bru.user_id IN (
+                                SELECT DISTINCT a.ID 
+                                FROM users a
+                                JOIN organisation_unit b ON a.organisation_unit_id = b.id
+                                WHERE b.parent_org_unit_id IN (
+                                    SELECT d.organisation_unit_id FROM users d WHERE d.ID = @logged_in_user_id
+                                )
+                            ))
+                            OR
+                            (@is_global_responsibility = 1 AND bru.user_id IN (
+                                SELECT DISTINCT a.ID 
+                                FROM users a
+                                JOIN organisation_unit_tier b ON a.organisation_unit_tier_id = b.id
+                                WHERE b.parent_org_unit_tier_id IN (
+                                    SELECT d.organisation_unit_tier_id FROM users d WHERE d.ID = @logged_in_user_id
+                                )
+                            ))
+                        )
+                    GROUP BY 
+                        c.name,
+                        YEAR(am.recon_month),
+                        DATENAME(month, am.recon_month) 
+                    ORDER BY 
+                        c.name, year, 
+                        MIN(MONTH(am.recon_month))
+                    OPTION (MAXRECURSION 1000);
+                  """
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            reconciliations = [
+                FileUpload(
+                    bank_account=row.bank_account,
+                    year=row.year,
+                    month=row.month,
+                    responsible_users=row.responsible_users
+                )
+                for row in result
+            ]
+            return reconciliations
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_next_approver_id(initiators_pending_submission_of_reconciliations):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Example list of user IDs
+            logged_in_user_ids = initiators_pending_submission_of_reconciliations
+
+            # Generate the comma-separated list for SQL
+            user_ids_str = ', '.join(str(uid) for uid in logged_in_user_ids)
+
+            query = f"""        
+                    DECLARE @work_breakdown_level INT = 2;		
+                    
+                    WITH ParentOrgUnits AS (
+                        SELECT DISTINCT b.parent_org_unit_id 
+                        FROM users a
+                        JOIN organisation_unit b ON a.organisation_unit_id = b.id 
+                        WHERE a.ID IN ({user_ids_str})
+                    ),
+                    ParentOrgUnitTiers AS (
+                        SELECT DISTINCT b.parent_org_unit_tier_id 
+                        FROM users a
+                        JOIN organisation_unit_tier b ON a.organisation_unit_tier_id = b.id 
+                        WHERE a.ID IN ({user_ids_str})
+                    ),
+                    GlobalApprovers AS (
+                        SELECT DISTINCT u.ID
+                        FROM users u
+                        JOIN user_role ur ON u.id = ur.user_id
+                        JOIN role r ON ur.role_id = r.id
+                        JOIN role_workflow_breakdown rwb ON r.id = rwb.role_id
+                        JOIN workflow_breakdown wb ON rwb.workflow_breakdown_id = wb.id
+                        WHERE wb.is_workflow_level = 1
+                        AND wb.level = @work_breakdown_level
+                        AND wb.is_responsibility_global = 1
+                        AND u.ID IN (
+                            SELECT DISTINCT a.ID
+                            FROM users a
+                            JOIN organisation_unit_tier b ON a.organisation_unit_tier_id = b.id
+                            WHERE b.id IN (SELECT parent_org_unit_tier_id FROM ParentOrgUnitTiers)
+                        )
+                    ),
+                    OrgBasedApprovers AS (
+                        SELECT DISTINCT u.ID
+                        FROM users u
+                        JOIN user_role ur ON u.id = ur.user_id
+                        JOIN role r ON ur.role_id = r.id
+                        JOIN role_workflow_breakdown rwb ON r.id = rwb.role_id
+                        JOIN workflow_breakdown wb ON rwb.workflow_breakdown_id = wb.id
+                        WHERE wb.is_workflow_level = 1
+                        AND wb.level = @work_breakdown_level
+                        AND wb.is_responsibility_global = 0
+                        AND u.ID IN (
+                            SELECT DISTINCT a.ID
+                            FROM users a
+                            JOIN organisation_unit b ON a.organisation_unit_id = b.id
+                            WHERE b.id IN (SELECT parent_org_unit_id FROM ParentOrgUnits)
+                        )
+                    )
+                    
+                    SELECT DISTINCT ID
+                    FROM (
+                        SELECT ID FROM GlobalApprovers
+                        UNION
+                        SELECT ID FROM OrgBasedApprovers
+                    ) AS Approvers
+                    ORDER BY ID ASC;
+            """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            return [row.ID for row in result]
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
 
 class FileDelete:
     def __init__(self, filename):
@@ -1656,12 +2577,21 @@ class FileDelete:
 
 
 class BankAccount:
-    def __init__(self, id, name, bank_id, currency_id, strategic_business_unit_id):
+    def __init__(self, id=None, name=None, bank_id=None, currency_id=None, strategic_business_unit_id=None, account=None, bank=None, currency=None, unit=None, creation_date=None, bank_account_name=None, bank_name=None, currency_name=None, org_unit_name=None):
         self.id = id
         self.name = name
         self.bank_id = bank_id
         self.currency_id = currency_id
         self.strategic_business_unit_id = strategic_business_unit_id
+        self.account = account
+        self.bank = bank
+        self.currency = currency
+        self.unit = unit
+        self.creation_date = creation_date
+        self.bank_account_name = bank_account_name
+        self.bank_name = bank_name
+        self.currency_name = currency_name
+        self.org_unit_name = org_unit_name
 
     @staticmethod
     def get_bank_accounts_for_dropdown_menu(user_id):
@@ -1711,24 +2641,670 @@ class BankAccount:
             cursor.close()
             conn.close()
 
+    @staticmethod
+    def get_all_bank_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name FROM bank ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            bank_details = [
+                Role(id=row.id, name=row.name)
+                for row in result
+            ]
+            return bank_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def bank_name_exists(bankname):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM bank WHERE name = ?"
+            cursor.execute(query, (bankname,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check username existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_bank(bank_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO bank (name)
+                VALUES (?)
+            """
+            cursor.execute(query, (bank_name,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new bank: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_bank_details(bank_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, name FROM bank WHERE name = ?
+            """
+            cursor.execute(query, (bank_name,))
+            result = cursor.fetchall()
+
+            bank_details = [
+                BankAccount(id=row.id, name=row.name)
+                for row in result
+            ]
+            return bank_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_bank(bank_id, bank_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE bank SET name = ? WHERE id = ?
+            """
+            cursor.execute(query, (bank_name, bank_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update bank: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_bank_account_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT ba.id, ba.name as account, b.name as bank, c.name as currency, ou.name as unit, 
+                        CONVERT(date, ba.creation_date) AS creation_date
+                        FROM bank_account ba 
+                        LEFT OUTER JOIN bank b ON ba.bank_id = b.id
+                        LEFT OUTER JOIN currency c ON ba.currency_id = c.id
+                        LEFT OUTER JOIN organisation_unit ou ON ba.strategic_business_unit_id = ou.id
+                        ORDER BY ba.name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            bank_details = [
+                BankAccount(id=row.id, account=row.account, bank=row.bank, currency=row.currency, unit=row.unit, creation_date=row.creation_date)
+                for row in result
+            ]
+            return bank_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def bank_account_name_exists(bank_account_name):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM bank_account WHERE name = ?"
+            cursor.execute(query, (bank_account_name,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check bank account existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_bank_account(bankAccountName, bank_id, currency_id, org_unit_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                        INSERT INTO bank_account (name, bank_id, currency_id, strategic_business_unit_id, creation_date)
+                        VALUES (?, ?, ?, ?, GETDATE())
+                    """
+            cursor.execute(query, (bankAccountName, bank_id, currency_id, org_unit_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new bank: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_bank_account_details(bank_account_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+        try:
+            query = """
+                SELECT ba.id, ba.name AS bank_account_name, b.id AS bank_id,
+                       c.id AS currency_id, ou.id AS org_unit_id, ba.creation_date
+                FROM bank_account ba
+                LEFT OUTER JOIN bank b ON ba.bank_id = b.id
+                LEFT OUTER JOIN currency c ON ba.currency_id = c.id
+                LEFT OUTER JOIN organisation_unit ou ON ba.strategic_business_unit_id = ou.id
+                WHERE ba.name = ?
+            """
+            cursor.execute(query, (bank_account_name,))
+            result = cursor.fetchall()
+
+            bank_account_details = [
+                {
+                    "id": row.id,
+                    "bankaccountname": row.bank_account_name,
+                    "bank": row.bank_id,
+                    "currency": row.currency_id,
+                    "org_unit": row.org_unit_id,
+                    "creation_date": row.creation_date
+                }
+                for row in result
+            ]
+
+            return bank_account_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_bank_account(bank_acc_id, bank_id, currency_id, org_unit_id, creation_date):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE bank_account
+                SET bank_id = ?, currency_id = ?, strategic_business_unit_id = ?, creation_date = ? 
+                WHERE id = ?
+            """
+            cursor.execute(query, (bank_id, currency_id, org_unit_id, creation_date, bank_acc_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update bank account: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
 
 class Role:
-    def __init__(self, id, name, organisation_unit_id):
+    def __init__(self, id=None, name=None):
         self.id = id
         self.name = name
-        self.organisation_unit_id = organisation_unit_id
 
+    @staticmethod
+    def get_all_role_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
 
-class OrganisationUnit:
-    def __init__(self, id, name):
-        self.id = id
-        self.name = name
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name FROM role ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            role_details = [
+                Role(id=row.id, name=row.name)
+                for row in result
+            ]
+            return role_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def role_name_exists(rolename):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM role WHERE name = ?"
+            cursor.execute(query, (rolename,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check username existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_role(role_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO role (name)
+                VALUES (?)
+            """
+            cursor.execute(query, (role_name,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new role: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_role(role_id, role_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE role SET name = ? WHERE id = ?
+            """
+            cursor.execute(query, (role_name, role_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_roles():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, name FROM role ORDER BY name
+            """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            usernames = [
+                Role(id=row.id, name=row.name)
+                for row in result
+            ]
+            return usernames
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_role_details(role_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, name FROM role WHERE name = ?
+            """
+            cursor.execute(query, (role_name,))
+            result = cursor.fetchall()
+
+            usernames = [
+                Role(id=row.id, name=row.name)
+                for row in result
+            ]
+            return usernames
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class Workflow:
-    def __init__(self, id, name):
+    def __init__(self, id=None, name=None, role_id=None, role_name=None, workflow_breakdown_id=None,
+                 workflow_breakdown_name=None, workflow_id=None, level=None, is_responsibility_global=None,
+                 menu_item_id=None, is_workflow_level=None):
         self.id = id
         self.name = name
+        self.role_id = role_id
+        self.role_name = role_name
+        self.workflow_breakdown_id = workflow_breakdown_id
+        self.workflow_breakdown_name = workflow_breakdown_name
+        self.workflow_id = workflow_id
+        self.level = level
+        self.is_responsibility_global = is_responsibility_global
+        self.menu_item_id = menu_item_id
+        self.is_workflow_level = is_workflow_level
+
+    @staticmethod
+    def get_all_workflow_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name FROM workflow ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_details = [
+                Workflow(id=row.id, name=row.name)
+                for row in result
+            ]
+            return workflow_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def workflow_name_exists(workflowName):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM workflow WHERE name = ?"
+            cursor.execute(query, (workflowName,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check workflow name existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_workflow(workflow_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                INSERT INTO workflow (name)
+                VALUES (?)
+            """
+            cursor.execute(query, (workflow_name,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new workflow: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_workflow(workflow_id, workflow_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE workflow SET name = ? WHERE id = ?
+            """
+            cursor.execute(query, (workflow_name, workflow_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update workflow: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_role_workflow_breakdown_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT rwb.id, rwb.role_id, r.name AS role_name, rwb.workflow_breakdown_id, 
+                        wb.name AS workflow_breakdown_name
+                        FROM role_workflow_breakdown rwb
+                        LEFT OUTER JOIN role r ON rwb.role_id = r.id
+                        LEFT OUTER JOIN workflow_breakdown wb ON rwb.workflow_breakdown_id = wb.id
+                        ORDER BY rwb.role_id, r.name, rwb.workflow_breakdown_id, wb.name
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_details = [
+                Workflow(id=row.id, role_id=row.role_id, role_name=row.role_name,
+                         workflow_breakdown_id=row.workflow_breakdown_id,
+                         workflow_breakdown_name=row.workflow_breakdown_name)
+                for row in result
+            ]
+            return workflow_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_workflow_breakdown_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, workflow_id, level, name, is_responsibility_global, menu_item_id, is_workflow_level 
+                        FROM workflow_breakdown
+                        ORDER BY id, workflow_id, level, name
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_breakdown_details = [
+                Workflow(id=row.id, workflow_id=row.workflow_id, level=row.level,
+                         name=row.name, is_responsibility_global=row.is_responsibility_global,
+                         menu_item_id=row.menu_item_id, is_workflow_level=row.is_workflow_level)
+                for row in result
+            ]
+            return workflow_breakdown_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def check_role_workflow_breakdown_exists(role_id, workflow_breakdown_id):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM role_workflow_breakdown WHERE role_id = ? AND workflow_breakdown_id = ?"
+            cursor.execute(query, (role_id, workflow_breakdown_id,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check role-workflow-breakdown existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_role_workflow_breakdown(role_id, workflow_breakdown_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                INSERT INTO role_workflow_breakdown (role_id, workflow_breakdown_id)
+                VALUES (?, ?)
+            """
+            cursor.execute(query, (role_id, workflow_breakdown_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new breakdown: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_role_workflow_breakdown(role_workflow_breakdown_id, role_id, workflow_breakdown_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE role_workflow_breakdown SET role_id = ?, workflow_breakdown_id = ? WHERE id = ?
+            """
+            cursor.execute(query, (role_id, workflow_breakdown_id, role_workflow_breakdown_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update role-workflow-breakdown: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class WorkflowBreakdown:
@@ -1774,12 +3350,148 @@ class WorkflowBreakdown:
 
 
 class UserRole:
-    def __init__(self, id, user_id, role_id, start_datetime, expiry_datetime):
+    def __init__(self, id=None, user_id=None, user_name=None, username=None, role_id=None, role_name=None, start_datetime=None, expiry_datetime=None):
         self.id = id
         self.user_id = user_id
+        self.username = username
+        self.user_name = user_name
         self.role_id = role_id
+        self.role_name = role_name
         self.start_datetime = start_datetime
         self.expiry_datetime = expiry_datetime
+
+    @staticmethod
+    def get_all_user_roles_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT ur.id, ur.user_id, u.username,
+                        LTRIM(RTRIM(COALESCE(u.Fname + ' ' + u.Mname + ' ' + u.Sname, ''))) AS user_name, 
+                        ur.role_id, r.name as role_name, 
+                        CAST(ur.start_datetime AS DATE) AS start_datetime, 
+                        CAST(ur.expiry_datetime AS DATE) AS expiry_datetime 
+                        FROM user_role ur LEFT OUTER JOIN users u ON ur.user_id = u.ID 
+                        LEFT OUTER JOIN role r ON ur.role_id = r.id 
+                        ORDER BY u.Fname, u.Mname, u.Sname;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            user_role_details = [
+                UserRole(id=row.id, user_id=row.user_id, username=row.username, user_name=row.user_name, role_id=row.role_id, role_name=row.role_name, start_datetime=row.start_datetime, expiry_datetime=row.expiry_datetime)
+                for row in result
+            ]
+            return user_role_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def user_role_exists(user_id, role_id):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM user_role WHERE user_id = ? AND role_id = ?"
+            cursor.execute(query, (user_id, role_id,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check user-role existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_user_role(user_id, role_id, start_date, end_date):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO user_role (user_id, role_id, start_datetime, expiry_datetime)
+                VALUES (?, ?, ?, ?)
+            """
+            cursor.execute(query, (user_id, role_id, start_date, end_date))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new user-role: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_user_role_id(user_name, role_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT ur.id FROM user_role ur  LEFT OUTER JOIN users u ON ur.user_id = u.ID 
+                        LEFT OUTER JOIN role r ON ur.role_id = r.id WHERE u.Username = ? AND r.name = ?
+                    """
+            cursor.execute(query, (user_name, role_name,))
+            result = cursor.fetchall()
+
+            user_role_id_details = [
+                {
+                    "id": row.id
+                }
+                for row in result
+            ]
+            return user_role_id_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_user_role(user_role_id, start_date, expiry_date):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE user_role SET start_datetime = ?, expiry_datetime = ? WHERE id = ?
+            """
+            cursor.execute(query, (start_date, expiry_date, user_role_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class ReconciliationApprovals:
@@ -1911,6 +3623,571 @@ class Audit:
             return action
         except Exception as e:
             print(f"Error while updating audit trail: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class Currency:
+    def __init__(self, id=None, name=None, code=None):
+        self.id = id
+        self.name = name
+        self.code = code
+
+    @staticmethod
+    def get_all_currency_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name, code FROM currency ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            currency_details = [
+                Currency(id=row.id, name=row.name, code=row.code)
+                for row in result
+            ]
+            return currency_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_currency_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name, code FROM currency ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            currency_details = [
+                Currency(id=row.id, name=row.name, code=row.code)
+                for row in result
+            ]
+            return currency_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def currency_name_exists(currencyname):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM currency WHERE name = ?"
+            cursor.execute(query, (currencyname,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check name of currency existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_currency(currency_name, currency_code):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO currency (name, code)
+                VALUES (?, ?)
+            """
+            cursor.execute(query, (currency_name, currency_code,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new role: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_currency_details(currency_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, name, code FROM currency WHERE name = ?
+            """
+            cursor.execute(query, (currency_name,))
+            result = cursor.fetchall()
+
+            currencies = [
+                Currency(id=row.id, name=row.name, code=row.code)
+                for row in result
+            ]
+            return currencies
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_currency(currency_id, currency_name, currency_code):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE currency SET name = ?, code = ? WHERE id = ?
+            """
+            cursor.execute(query, (currency_name, currency_code, currency_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class BankAccountResponsibleUser:
+    def __init__(self, id=None, bank_account_id=None, user_id=None, bank_account_name=None, username=None, name=None, is_active=None, status=None):
+        self.id = id
+        self.bank_account_id = bank_account_id
+        self.user_id = user_id
+        self.bank_account_name = bank_account_name
+        self.username = username
+        self.name = name
+        self.is_active = is_active
+        self.status = status
+
+    @staticmethod
+    def get_all_bank_responsible_person_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT baru.id, ba.name AS bank_account_name, u.Username AS username, 
+                        LTRIM(RTRIM(COALESCE(u.Fname + ' ' + u.Mname + ' ' + u.Sname, ''))) AS name,
+                        CASE 
+                            WHEN baru.is_active = 1 THEN 'Active' 
+                            ELSE 'Disabled' 
+                        END AS status
+                        FROM bank_account_responsible_user baru
+                        LEFT OUTER JOIN bank_account ba ON baru.bank_account_id = ba.id
+                        LEFT OUTER JOIN users u ON baru.user_id = u.ID
+                        WHERE ba.name is not null
+                        ORDER BY ba.name, u.Username;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            responsible_user_details = [
+                BankAccountResponsibleUser(id=row.id, bank_account_name=row.bank_account_name, username=row.username, name=row.name, status=row.status)
+                for row in result
+            ]
+            return responsible_user_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def bank_account_responsibility_exists(bankAccId, userId):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM bank_account_responsible_user WHERE bank_account_id = ? AND user_id = ?"
+            cursor.execute(query, (bankAccId, userId,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check user-role existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_bank_account_responsibility(bank_acc_id, user_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO bank_account_responsible_user (bank_account_id, user_id)
+                VALUES (?, ?)
+            """
+            cursor.execute(query, (bank_acc_id, user_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new user-role: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_bank_account_responsibility_details(bank_account_name, username):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT ba.id, ba.id AS bank_account_id, 
+                u.ID AS user_id, baru.is_active
+                FROM bank_account_responsible_user baru
+                LEFT OUTER JOIN bank_account ba ON baru.bank_account_id = ba.id
+                LEFT OUTER JOIN users u ON baru.user_id = u.ID
+                WHERE ba.name is not null AND ba.name = ? AND u.Username = ?
+            """
+            cursor.execute(query, (bank_account_name, username, ))
+            result = cursor.fetchall()
+
+            responsibilities = [
+                BankAccountResponsibleUser(id=row.id, bank_account_id=row.bank_account_id, user_id=row.user_id, is_active=row.is_active)
+                for row in result
+            ]
+            return responsibilities
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_bank_account_responsibility(responsibility_id, bank_acc_id, user_id, is_active):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE bank_account_responsible_user SET bank_account_id = ?, user_id = ?, is_active = ? WHERE id = ?
+            """
+            cursor.execute(query, (bank_acc_id, user_id, is_active, responsibility_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update user: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class OrganisationUnitTier:
+    def __init__(self, id=None, name=None, parent_org_unit_tier_name=None, parent_org_unit_tier_id=None):
+        self.id = id
+        self.name = name
+        self.parent_org_unit_tier_name = parent_org_unit_tier_name
+        self.parent_org_unit_tier_id = parent_org_unit_tier_id
+
+    @staticmethod
+    def get_all_org_unit_tier_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT out.id, out.name, 
+                        (SELECT name FROM organisation_unit_tier WHERE id = out.parent_org_unit_tier_id) AS parent_org_unit_tier_name,
+                        parent_org_unit_tier_id 
+                        FROM organisation_unit_tier out ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            unit_tier_details = [
+                OrganisationUnitTier(id=row.id, name=row.name, parent_org_unit_tier_name=row.parent_org_unit_tier_name,
+                                     parent_org_unit_tier_id=row.parent_org_unit_tier_id)
+                for row in result
+            ]
+            return unit_tier_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def org_unit_name_exists(unit_name):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM organisation_unit WHERE name = ?"
+            cursor.execute(query, (unit_name,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check name of Organisation Unit Name existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_org_unit_tier(unit_tier_name, parent_unit_tier):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                INSERT INTO organisation_unit_tier (name, parent_org_unit_tier_id)
+                VALUES (?, ?)
+            """
+            cursor.execute(query, (unit_tier_name, parent_unit_tier,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new role: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_org_unit_tier(org_unit_tier_id, org_unit_tier_name, parent_org_unit_tier_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE organisation_unit_tier SET name = ?, parent_org_unit_tier_id = ? WHERE id = ?
+            """
+            cursor.execute(query, (org_unit_tier_name, parent_org_unit_tier_id, org_unit_tier_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update Organisation Unit Tier: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def org_unit_tier_exists(org_unit_tier_name, parent_org_unit_tier_id):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM organisation_unit_tier WHERE name = ? AND parent_org_unit_tier_id = ?"
+            cursor.execute(query, (org_unit_tier_name, parent_org_unit_tier_id,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check org_unit_tier existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class OrganisationUnit:
+    def __init__(self, id=None, name=None, parent_org_unit_id=None, parent_org_unit_name=None, org_unit_tier_name=None, org_unit_tier_id=None):
+        self.id = id
+        self.name = name
+        self.parent_org_unit_id = parent_org_unit_id
+        self.parent_org_unit_name = parent_org_unit_name
+        self.org_unit_tier_name = org_unit_tier_name
+        self.org_unit_tier_id = org_unit_tier_id
+
+    @staticmethod
+    def get_all_org_unit_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT ou.id, ou.name, ou.parent_org_unit_id, 
+                        (SELECT name FROM organisation_unit WHERE id = ou.parent_org_unit_id) AS parent_org_unit_name
+                        ,out.id AS org_unit_tier_id, out.name AS org_unit_tier_name 
+                        FROM organisation_unit ou 
+                        LEFT OUTER JOIN organisation_unit_tier out ON ou.org_unit_tier_id = out.id
+                        ORDER BY ou.name
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            unit_details = [
+                OrganisationUnit(id=row.id, name=row.name, parent_org_unit_id=row.parent_org_unit_id,
+                                 parent_org_unit_name=row.parent_org_unit_name, org_unit_tier_id=row.org_unit_tier_id,
+                                 org_unit_tier_name=row.org_unit_tier_name)
+                for row in result
+            ]
+            return unit_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def org_unit_name_exists(unit_name):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM organisation_unit WHERE name = ?"
+            cursor.execute(query, (unit_name,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check name of currency existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_org_unit(unit_name, parent_unit, unit_tier):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                INSERT INTO organisation_unit (name, org_unit_tier_id, parent_org_unit_id)
+                VALUES (?, ?, ?)
+            """
+            cursor.execute(query, (unit_name, unit_tier, parent_unit,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new organisation unit: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def check_unit_exists(org_unit_name, parent_unit_id, org_unit_tier_id):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = ("SELECT COUNT(*) FROM organisation_unit WHERE name = ? AND org_unit_tier_id = ? AND "
+                     "parent_org_unit_id = ?")
+            cursor.execute(query, (org_unit_name, org_unit_tier_id, parent_unit_id, ))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check Organisation Unit existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_org_unit(org_unit_id, org_unit_name, parent_unit_id, org_unit_tier_id):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE organisation_unit SET name = ?, org_unit_tier_id = ?, parent_org_unit_id = ? WHERE id = ?
+            """
+            cursor.execute(query, (org_unit_name, org_unit_tier_id, parent_unit_id, org_unit_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update Organisation Unit: ", e)
+            return False
         finally:
             cursor.close()
             conn.close()

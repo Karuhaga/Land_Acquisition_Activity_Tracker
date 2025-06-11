@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
 {% block title %}
-    Bank Account Responsible Person
+    Bank Account Responsible User
 {% endblock %}
 
 {% block page_title %}
-    <div data-page-title>Bank Account Responsible Person</div>
+    <div data-page-title>Bank Account Responsible User</div>
 {% endblock %}
 
 
@@ -13,8 +13,8 @@
 
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span>Bank Account Responsible Person</span>
-            <button style="font-size: 18px;" class="btn-outline-custom" type="button" onclick="currencyRole()">Add Responsible Person</button>
+            <span>Bank Account Responsible User</span>
+            <button style="font-size: 18px;" class="btn-outline-custom" type="button" onclick="bankResponsiblePerson()">Add Responsible User</button>
         </div>
 
         <div class="card-body">
@@ -22,25 +22,31 @@
                 <thead>
                     <tr>
                         <th style="width: 5%; white-space: nowrap; text-align: left;" data-orderable="false" data-ordering="false">#</th> <!-- Row number column -->
-                        <th style="">Currency</th>
-                        <th style="">Code</th>
-                        <th style="width: 10%; white-space: nowrap; text-align: left;" data-orderable="false" data-ordering="false" data-orderable="false" data-ordering="false">Edit Currency</th>
+                        <th style="">Bank Account</th>
+                        <th style="">Username</th>
+                        <th style="">Name</th>
+                        <th style="">Status</th>
+                        <th style="width: 10%; white-space: nowrap; text-align: left;" data-orderable="false" data-ordering="false" data-orderable="false" data-ordering="false">Edit</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for currency_detail in currency_details %}
+                    {% for bank_account_responsible_user_detail in bank_account_responsible_user_details %}
                     <tr>
                         <td style="width: 5%; white-space: nowrap; text-align: left;">{{ loop.index }}</td> <!-- Display row number -->
-                        <td style="">{{ currency_detail.name }}</td>
-                        <td style="">{{ currency_detail.code }}</td>
+                        <td style="">{{ bank_account_responsible_user_detail.bank_account_name }}</td>
+                        <td style="">{{ bank_account_responsible_user_detail.username }}</td>
+                        <td style="">{{ bank_account_responsible_user_detail.name }}</td>
+                        <td style="">{{ bank_account_responsible_user_detail.status }}</td>
                         <td style="width: 10%; white-space: nowrap; text-align: left;" data-orderable="false" data-ordering="false">
-                            <button class="btn-outline-custom edit-currency-btn" style="float: right;" type="button" data-role-id="{{ currency_detail.id }}" data-role-name="{{ currency_detail.name }}">Edit</button>
+                            <button class="btn-outline-custom edit-bank-account-responsibility-btn" style="float: right;" type="button" data-role-id="{{ bank_account_responsible_user_detail.id }}" data-role-name="{{ bank_account_responsible_user_detail.bank_account_name }}">Edit</button>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
                         <td></td>
-                        <td style="text-align: center; max-width: 150px; word-break: break-all; white-space: normal;">No role(s) found.</td>
+                        <td style="text-align: center; max-width: 150px; word-break: break-all; white-space: normal;">No user(s) found.</td>
+                        <td></td>
+                        <td></td>
                         <td></td>
                         <td></td>
                     </tr>
@@ -67,30 +73,30 @@
         $("#flashMessageModal").modal("show");
     }
 
-    function currencyRole() {
+    function bankResponsiblePerson() {
         // Open the modal
-        $("#currencyAddModal").modal("show");
+        $("#bankAccountResponsibleUserAddModal").modal("show");
     }
 
     function showConfirmation(actionType) {
         let modalTitle = "";
         let modalMessage = "";
 
-        if (actionType === "add currency") {
-            modalTitle = "Confirm Addition of Currency";
-            modalMessage = "Are you sure you want to add this currency?";
+        if (actionType === "add bank account responsible person") {
+            modalTitle = "Confirm Addition of User Responsibility";
+            modalMessage = "Are you sure you want to add this user responsibility?";
             $("#confirmAction").off("click").on("click", function () {
                 $("#confirmationModal").modal("hide");
-                registerCurrency();
+                registerResponsibleUser();
             });
         }
 
-        if (actionType === "edit currency") {
-            modalTitle = "Confirm Update of Role";
-            modalMessage = "Are you sure you want to update this currency?";
+        if (actionType === "edit bank account responsible person") {
+            modalTitle = "Confirm Update of Bank Account Responsibility";
+            modalMessage = "Are you sure you want to update this bank account responsibility?";
             $("#confirmAction").off("click").on("click", function () {
                 $("#confirmationModal").modal("hide");
-                updateCurrency();
+                updateBankAccountResponsibility();
             });
         }
 
@@ -108,8 +114,8 @@
         }, 10);
     }
 
-    function registerCurrency() {
-        const form = document.getElementById("addCurrencyForm");
+    function registerResponsibleUser() {
+        const form = document.getElementById("addBankAccountResponsibleUserForm");
 
         if (!form.checkValidity()) {
             form.reportValidity();
@@ -117,28 +123,28 @@
         }
 
         const formData = {
-            currencyName: $("#currency3").val().trim(),
-            codeName: $("#code3").val().trim(),
+            bankAccId: $("#bankAccountResponsibleBank").val().trim(),
+            userId: $("#bankAccountResponsibleUser").val().trim(),
         };
 
-        // Step 1: Check if role name already exists
+        // Step 1: Check if responsibility name already exists
         $.ajax({
-            url: `/check-currency-name/${encodeURIComponent(formData.currencyName)}`,
+            url: `/check-bank-account-responsibility-role/${encodeURIComponent(formData.bankAccId)}/${encodeURIComponent(formData.userId)}`,
             type: "GET",
             success: function (response) {
                 if (response.exists) {
-                    showFlashMessage(`Currency name '${formData.currencyName}' already exists.`, "warning");
+                    showFlashMessage(`Bank Account responsibility already exists.`, "warning");
                     return;
                 }
 
                 // Step 2: Submit new role
                 $.ajax({
-                    url: "/admin-register-new-currency",
+                    url: "/admin-register-new-bank-account-responsibility",
                     type: "POST",
                     contentType: "application/json",
                     data: JSON.stringify(formData),
                     success: function (response) {
-                        $("#currencyAddModal").modal("hide");
+                        $("#bankAccountResponsibleUserAddModal").modal("hide");
                         showFlashMessage(response.message, "success");
                         $("#flashMessageModal").on("hidden.bs.modal", function () {
                             $(".content").load(location.href + " .content > *", function() {
@@ -154,28 +160,29 @@
                 });
             },
             error: function () {
-                showFlashMessage("Failed to validate name of currency. Please try again.", "danger");
+                showFlashMessage("Failed to validate bank account responsibility. Please try again.", "danger");
             }
         });
     }
 
-    function updateCurrency() {
-        const form = document.getElementById("currencyEditModal");
+    function updateBankAccountResponsibility() {
+        const form = document.getElementById("editBankAccountResponsibilityForm");
 
-        const currencyId = $("#editCurrencyId").val();
+        const bankAccResponsibilityId = $("#editBankAccountResponsibilityId").val();
         const formData = {
-            currency_id: currencyId,
-            currency_name: $("#currency4").val(),
-            currency_code: $("#code4").val(),
+            responsibility_id: bankAccResponsibilityId,
+            bank_acc_id: $("#bankAccountResponsibleBank2").val(),
+            user_id: $("#bankAccountResponsibleUser2").val(),
+            is_active: $('input[name="is_active2"]:checked').val(),
         };
 
         $.ajax({
-            url: "/admin-update-currency",
+            url: "/admin-update-bank-account-responsibility",
             type: "POST",
             contentType: "application/json",
             data: JSON.stringify(formData),
             success: function (response) {
-                $("#currencyEditModal").modal("hide");
+                $("#bankAccountResponsibilityEditModal").modal("hide");
                 showFlashMessage(response.message, "success");
                 $("#flashMessageModal").on("hidden.bs.modal", function () {
                     $(".content").load(location.href + " .content > *", function() {
@@ -191,28 +198,36 @@
         });
     }
 
-    // Calling the role_edit_modal.html
-    $(document).off("click", ".edit-currency-btn").on("click", ".edit-currency-btn", function () {
+    // Calling the bank_account_responsible_user_edit_modal.html
+    $(document).off("click", ".edit-bank-account-responsibility-btn").on("click", ".edit-bank-account-responsibility-btn", function () {
 
-        const currencyName = $(this).closest("tr").find("td:nth-child(2)").text().trim();
+        const bankAccountName = $(this).closest("tr").find("td:nth-child(2)").text().trim();
+        const username = $(this).closest("tr").find("td:nth-child(3)").text().trim();
 
         $.ajax({
-            url: "/get-currency-details",
+            url: "/get-bank-account-responsibility-details",
             type: "GET",
-            data: { currency_name: currencyName },
+            data: { bank_account_name: bankAccountName,  username: username },
             success: function (data) {
                 // Populate modal fields
-                $("#currency4").val(data.currency_name);
-                $("#code4").val(data.currency_code);
+                $("#bankAccountResponsibleBank2").val(data.bank_account_id);
+                $("#bankAccountResponsibleUser2").val(data.user_id);
+
+                // Set the active status
+                if (data.is_active === true || data.is_active === 1) {
+                    $("#activeYes2").prop("checked", true);
+                } else {
+                    $("#activeNo2").prop("checked", true);
+                }
 
                 // Store ID in form using jQuery data
-                $("#editCurrencyId").val(data.id);
+                $("#editBankAccountResponsibilityId").val(data.id);
 
                 // Show the modal
-                $("#currencyEditModal").modal("show");
+                $("#bankAccountResponsibilityEditModal").modal("show");
             },
             error: function () {
-                showFlashMessage("Failed to load currency details. Please try again.", "danger");
+                showFlashMessage("Failed to load bank account responsibility details. Please try again.", "danger");
             }
         });
     });
