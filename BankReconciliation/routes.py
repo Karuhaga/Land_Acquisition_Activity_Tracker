@@ -1556,16 +1556,6 @@ def admin_update_workflows():
         return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
 
 
-@app.route('/admin-workflow-breakdown', methods=['GET', 'POST'])
-@login_required
-@role_required(7, 8, 9, 10)
-def admin_workflow_breakdown():
-    unit_details = OrganisationUnit.get_all_org_unit_details()
-    unit_tier_details = OrganisationUnitTier.get_all_org_unit_tier_details()
-    return render_template('workflow_breakdown.html',
-                           unit_details=unit_details, unit_tier_details=unit_tier_details)
-
-
 @app.route('/admin-role-workflow-breakdown', methods=['GET', 'POST'])
 @login_required
 @role_required(7, 8, 9, 10)
@@ -1634,6 +1624,55 @@ def admin_update_role_workflow_breakdown_role():
             return jsonify({"message": "Role updated successfully."}), 200
         else:
             return jsonify({"error": "Failed to update user.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-workflow-breakdown', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_workflow_breakdown():
+    workflow_breakdown_details = WorkflowBreakdown.get_every_workflow_breakdown_details()
+    workflow_details = Workflow.get_all_workflow_details()
+    return render_template('workflow_breakdown.html',
+                           workflow_breakdown_details=workflow_breakdown_details, workflow_details=workflow_details)
+
+
+@app.route('/check-workflow-breakdown/<string:workflowBreakdownName>/<int:workflow_id>/<int:level_id>/<int:item_menu_id>/<int:is_responsibility_global>/<int:is_workflow_level>', methods=['GET'])
+@login_required
+def check_workflow_breakdown_exists(workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global, is_workflow_level):
+    exists = WorkflowBreakdown.workflow_breakdown_exists(workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global, is_workflow_level)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-workflow-breakdown', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_register_new_workflow_breakdown():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        workflowBreakdownName = data.get("workflowBreakdownName", "").strip()
+        workflow_id = data.get("workflow_id", "").strip()
+        level_id = data.get("level_id", "").strip()
+        item_menu_id = data.get("item_menu_id", "").strip()
+        is_responsibility_global = data.get("is_responsibility_global", "").strip()
+        is_workflow_level = data.get("is_workflow_level", "").strip()
+
+        # Validate required fields
+        if not all([workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global,
+                    is_workflow_level]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = WorkflowBreakdown.insert_new_workflow_breakdown(workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global, is_workflow_level)
+        if result:
+            return jsonify({"message": "Workflow breakdown added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert workflow breakdown.", "type": "danger"}), 500
 
     except Exception as e:
         print("Error inserting new user:", e)

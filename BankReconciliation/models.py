@@ -3308,7 +3308,8 @@ class Workflow:
 
 
 class WorkflowBreakdown:
-    def __init__(self, id, workflow_id, level, name, is_responsibility_global, menu_item, role_name):
+    def __init__(self, id=None, workflow_id=None, level=None, name=None, is_responsibility_global=None, menu_item=None,
+                 role_name=None, workflow_name=None, menu_item_id=None, is_workflow_level=None):
         self.id = id
         self.workflow_id = workflow_id
         self.level = level
@@ -3316,6 +3317,9 @@ class WorkflowBreakdown:
         self.is_responsibility_global = is_responsibility_global
         self.menu_item = menu_item
         self.role_name = role_name
+        self.workflow_name = workflow_name
+        self.menu_item_id = menu_item_id
+        self.is_workflow_level = is_workflow_level
 
     @staticmethod
     def get_workflow_breakdown_for_reconciliation_approval(workflow_id, is_workflow_level=True):
@@ -3328,12 +3332,13 @@ class WorkflowBreakdown:
         try:
             # Get workflow breakdown
             query = """SELECT wb.id, wb.workflow_id, wb.level, wb.name, 
-                    wb.is_responsibility_global, wb.menu_item_id, r.name AS role_name 
-                    FROM workflow_breakdown wb
-                    JOIN role_workflow_breakdown rwb ON wb.id = rwb.workflow_breakdown_id
-                    JOIN role r ON rwb.role_id = r.id
-                    WHERE wb.workflow_id = ? AND wb.is_workflow_level = ?
-                    ORDER BY wb.level ASC"""
+                        wb.is_responsibility_global, wb.menu_item_id, r.name AS role_name 
+                        FROM workflow_breakdown wb
+                        JOIN role_workflow_breakdown rwb ON wb.id = rwb.workflow_breakdown_id
+                        JOIN role r ON rwb.role_id = r.id
+                        WHERE wb.workflow_id = ? AND wb.is_workflow_level = ?
+                        ORDER BY wb.level ASC
+                    """
             cursor.execute(query, (workflow_id, is_workflow_level))
             result = cursor.fetchall()
 
@@ -3344,6 +3349,131 @@ class WorkflowBreakdown:
         except Exception as e:
             print("Database error:", e)
             return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_workflow_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name FROM workflow ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_details = [
+                Workflow(id=row.id, name=row.name)
+                for row in result
+            ]
+            return workflow_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_every_workflow_breakdown_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT 
+                            wb.id,
+                            wb.name,
+                            wb.workflow_id,
+                            wf.name AS workflow_name,
+                            wb.level,
+                            CASE 
+                                WHEN wb.is_responsibility_global = 1 THEN 'Yes' 
+                                ELSE 'No' 
+                            END AS is_responsibility_global,
+                            wb.menu_item_id,
+                            CASE 
+                                WHEN wb.is_workflow_level = 1 THEN 'Yes' 
+                                ELSE 'No' 
+                            END AS is_workflow_level
+                        FROM 
+                            workflow_breakdown wb
+                        LEFT OUTER JOIN 
+                            workflow wf ON wb.workflow_id = wf.id;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_breakdown_details = [
+                WorkflowBreakdown(id=row.id, name=row.name, workflow_id=row.workflow_id,
+                                  workflow_name=row.workflow_name, level=row.level,
+                                  is_responsibility_global=row.is_responsibility_global, menu_item_id=row.menu_item_id,
+                                  is_workflow_level=row.is_workflow_level)
+                for row in result
+            ]
+            return workflow_breakdown_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def workflow_breakdown_exists(workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global,
+                                  is_workflow_level):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = ("SELECT COUNT(*) FROM workflow_breakdown WHERE workflow_id = ? AND level = ? AND name = ? AND "
+                     "is_responsibility_global = ? AND menu_item_id = ? AND is_workflow_level = ?")
+            cursor.execute(query, (workflow_id, level_id, workflowBreakdownName, is_responsibility_global,
+                                   item_menu_id, is_workflow_level, ))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check workflow name existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_workflow_breakdown(workflowBreakdownName, workflow_id, level_id, item_menu_id, is_responsibility_global, is_workflow_level):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                INSERT INTO workflow_breakdown (workflow_id, level, name, is_responsibility_global, menu_item_id, is_workflow_level)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """
+            cursor.execute(query, (workflow_id, level_id, workflowBreakdownName, is_responsibility_global, item_menu_id, is_workflow_level))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new workflow breakdown: ", e)
+            return False
         finally:
             cursor.close()
             conn.close()
