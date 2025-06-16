@@ -2,7 +2,7 @@ from BankReconciliation import app, os, allowed_file
 from BankReconciliation.models import (User, FileUploadBatch, FileUpload, FileDelete, BankAccount,
                                        ReconciliationApprovals, WorkflowBreakdown, EmailHelper, Audit, UserSummary,
                                        Role, UserRole, Currency, BankAccountResponsibleUser, OrganisationUnitTier,
-                                       OrganisationUnit, Workflow)
+                                       OrganisationUnit, Workflow, MenuItem)
 from BankReconciliation.forms import LoginForm
 from flask import render_template, redirect, url_for, flash, request, jsonify, session, send_from_directory, abort
 import re
@@ -114,6 +114,7 @@ def dashboard_page():
 @app.route('/submit-reconciliations', methods=['GET', 'POST'])
 @login_required
 @role_required(1)
+# hint: "@role_required" refers to id of workflow_breakdown database table
 def submit_reconciliations_page():
     # Fetch bank accounts from the database
     bank_accounts = BankAccount.get_bank_accounts_for_dropdown_menu(current_user.id)
@@ -598,6 +599,14 @@ def report_reconciliations_pending_approval_page():
 def report_fully_approved_reconciliations_page():
     reconciliations = FileUpload.get_fully_approved_reconciliations_report()
     return render_template('report_fully_approved_reconciliations.html', reconciliations=reconciliations)
+
+
+@app.route('/report-rejected-reconciliations', methods=['GET', 'POST'])
+@login_required
+@role_required(19, 20, 21)
+def report_rejected_reconciliations_page():
+    reconciliations = FileUpload.get_rejected_reconciliations_report()
+    return render_template('report_rejected_reconciliations.html', reconciliations=reconciliations)
 
 
 @app.route('/admin-users', methods=['GET', 'POST'])
@@ -1673,6 +1682,107 @@ def admin_register_new_workflow_breakdown():
             return jsonify({"message": "Workflow breakdown added successfully."}), 200
         else:
             return jsonify({"error": "Failed to insert workflow breakdown.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-workflow-breakdown', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_workflow_breakdown():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        workflowBreakdownIdEdit = data.get("workflowBreakdownIdEdit")
+        workflowBreakdownNameEdit = data.get("workflowBreakdownNameEdit")
+        workflowEdit = data.get("workflowEdit")
+        levelEdit = data.get("levelEdit")
+        item_menu_id_edit = data.get("item_menu_id_edit")
+        is_responsibility_global_edit = data.get("is_responsibility_global_edit")
+        is_workflow_level_edit = data.get("is_workflow_level_edit")
+
+        # Validate required fields
+        if workflowBreakdownIdEdit is None or workflowBreakdownNameEdit is None or workflowEdit is None or levelEdit is None or item_menu_id_edit is None or is_responsibility_global_edit is None or is_workflow_level_edit is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = WorkflowBreakdown.update_workflow_breakdown(workflowBreakdownIdEdit, workflowBreakdownNameEdit, workflowEdit, levelEdit, item_menu_id_edit, is_responsibility_global_edit, is_workflow_level_edit)
+        if result:
+            return jsonify({"message": "Workflow Breakdown updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update workflow breakdown.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new workflow breakdown:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-menu-items', methods=['GET', 'POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_menu_items():
+    menu_item_details = MenuItem.get_all_menu_item_details()
+    return render_template('menu_items.html', menu_item_details=menu_item_details)
+
+
+@app.route('/check-menu-item-name/<string:menuItemName>', methods=['GET'])
+@login_required
+def check_menu_item_name_exists(menuItemName):
+    exists = MenuItem.menu_item_name_exists(menuItemName)
+    return jsonify({"exists": exists})
+
+
+@app.route('/admin-register-new-menu-item', methods=['POST'])
+@login_required
+def admin_register_new_menu_item():
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        menuItemName = data.get("menuItemName", "").strip()
+
+        # Validate required fields
+        if not all([menuItemName]):
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = MenuItem.insert_new_menu_item(menuItemName=menuItemName)
+
+        if result:
+            return jsonify({"message": "Menu Item added successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to insert menu item.", "type": "danger"}), 500
+
+    except Exception as e:
+        print("Error inserting new user:", e)
+        return jsonify({"error": "An error occurred while processing the request.", "type": "danger"}), 500
+
+
+@app.route('/admin-update-menu-item', methods=['POST'])
+@login_required
+@role_required(7, 8, 9, 10)
+def admin_update_menu_item():
+
+    data = request.get_json()
+
+    try:
+        # Extract fields
+        edit_menu_item_id = data.get("edit_menu_item_id")
+        menu_item_name = data.get("menu_item_name")
+
+        # Validate required fields
+        if edit_menu_item_id is None or menu_item_name is None:
+            return jsonify({"error": "Missing required fields.", "type": "danger"}), 400
+
+        # Insert user into DB (pseudo-function: implement in your model)
+        result = MenuItem.update_menu_item(edit_menu_item_id, menu_item_name)
+        if result:
+            return jsonify({"message": "Menu Item updated successfully."}), 200
+        else:
+            return jsonify({"error": "Failed to update Menu Item.", "type": "danger"}), 500
 
     except Exception as e:
         print("Error inserting new user:", e)

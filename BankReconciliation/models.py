@@ -1137,7 +1137,7 @@ class FileUploadBatch:
 class FileUpload:
     def __init__(self, id=None, ID=None, bank_account=None, year=None, month=None, batch_id=None, file_name=None,
                  date_time=None, approve_as=None, responsible_users=None, next_approver=None, status=None, email=None,
-                 fname=None):
+                 fname=None, submission_status=None, name=None, approver=None, rejected_on=None, comment=None):
         self.id = id
         self.ID = ID
         self.bank_account = bank_account
@@ -1152,6 +1152,11 @@ class FileUpload:
         self.status = status
         self.email = email
         self.fname = fname
+        self.submission_status = submission_status
+        self.name = name
+        self.approver = approver
+        self.rejected_on = rejected_on
+        self.comment = comment
 
     @staticmethod
     def insert_into_file_upload(batch_id, file_name, bank_account, year, month):
@@ -1274,7 +1279,11 @@ class FileUpload:
             # Raw MSSQL Query to fetch all files that are not marked as removed
             query = """
                         SELECT b.name as bank_account_id, year, 
-                        (select DateName(month, DateAdd(month, month, 0) - 1)) as month, file_name, batch_id 
+                        (select DateName(month, DateAdd(month, month, 0) - 1)) as month, file_name, batch_id,
+                            CASE 
+                                WHEN c.submission_status = 0 THEN 'Pending Submission' 
+                                ELSE 'Rejected' 
+                            END AS submission_status 
                         FROM file_upload a 
                         LEFT OUTER JOIN bank_account b ON a.bank_account_id = b.id
                         LEFT OUTER JOIN file_upload_batch c ON c.id = a.batch_id
@@ -1293,7 +1302,8 @@ class FileUpload:
                     "year": row.year,
                     "month": row.month,
                     "file_name": row.file_name,
-                    "batch_id": row.batch_id
+                    "batch_id": row.batch_id,
+                    "submission_status": row.submission_status
                 }
                 for row in result
             ]
@@ -1401,6 +1411,51 @@ class FileUpload:
             reconciliations = [
                 FileUpload(bank_account=row.bank_account, year=row.year, month=row.month,
                            file_name=row.file_name, date_time=row.date_time, next_approver=row.next_approver)
+                for row in result
+            ]
+            return reconciliations
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_rejected_reconciliations_report():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT 
+                            ra.id, 
+                            ba.name AS bank_account, 
+                            fu.year, 
+                            (SELECT DATENAME(month, DATEADD(month, fu.month, 0) - 1)) AS month,
+                            fu.file_name, 
+                            LTRIM(RTRIM(COALESCE(r.name + ' - ' + u.Fname + ' ' + u.Mname + ' ' + u.Sname, ''))) AS approver,
+                            CONVERT(VARCHAR(19), ra.date_time, 120) AS rejected_on,  -- YYYY-MM-DD HH:MI:SS
+                            ra.comment
+                        FROM reconciliation_approvals ra
+                        LEFT OUTER JOIN file_upload fu ON ra.file_upload_id = fu.id
+                        LEFT OUTER JOIN bank_account ba ON fu.bank_account_id = ba.id
+                        LEFT OUTER JOIN users u ON ra.approver_id = u.ID
+                        LEFT OUTER JOIN role r ON ra.level = r.id
+                        WHERE ra.decision = 3
+                        ORDER BY bank_account, rejected_on;
+                """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            reconciliations = [
+                FileUpload(id=row.id, bank_account=row.bank_account, year=row.year, month=row.month, file_name=row.file_name,
+                           approver=row.approver, rejected_on=row.rejected_on, comment=row.comment)
                 for row in result
             ]
             return reconciliations
@@ -1880,7 +1935,8 @@ class FileUpload:
         try:
             # Check if a record with the given bank_account, year, and month exists
             cursor.execute(
-                "SELECT COUNT(*) FROM file_upload WHERE bank_account_id = ? AND year = ? AND month = ?",
+                "SELECT COUNT(*) FROM file_upload WHERE bank_account_id = ? AND year = ? AND month = ? AND "
+                "removed_by_user_on_upload_page = 0",
                 (bank_account, year, month)  # Parameters must be in a tuple
             )
 
@@ -3478,6 +3534,87 @@ class WorkflowBreakdown:
             cursor.close()
             conn.close()
 
+    @staticmethod
+    def update_workflow(workflow_id, workflow_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE workflow SET name = ? WHERE id = ?
+            """
+            cursor.execute(query, (workflow_name, workflow_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update workflow: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_role_workflow_breakdown_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT rwb.id, rwb.role_id, r.name AS role_name, rwb.workflow_breakdown_id, 
+                        wb.name AS workflow_breakdown_name
+                        FROM role_workflow_breakdown rwb
+                        LEFT OUTER JOIN role r ON rwb.role_id = r.id
+                        LEFT OUTER JOIN workflow_breakdown wb ON rwb.workflow_breakdown_id = wb.id
+                        ORDER BY rwb.role_id, r.name, rwb.workflow_breakdown_id, wb.name
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            workflow_details = [
+                Workflow(id=row.id, role_id=row.role_id, role_name=row.role_name,
+                         workflow_breakdown_id=row.workflow_breakdown_id,
+                         workflow_breakdown_name=row.workflow_breakdown_name)
+                for row in result
+            ]
+            return workflow_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_workflow_breakdown(workflowBreakdownIdEdit, workflowBreakdownNameEdit, workflowEdit, levelEdit,
+                                  item_menu_id_edit, is_responsibility_global_edit, is_workflow_level_edit):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """UPDATE workflow_breakdown SET workflow_id = ?, level = ?, name = ?, is_responsibility_global = 
+            ?, menu_item_id = ?, is_workflow_level = ? WHERE id = ?"""
+            cursor.execute(query, (workflowEdit, levelEdit, workflowBreakdownNameEdit, is_responsibility_global_edit,
+                                   item_menu_id_edit, is_workflow_level_edit, workflowBreakdownIdEdit))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update workflow breakdown: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
 
 class UserRole:
     def __init__(self, id=None, user_id=None, user_name=None, username=None, role_id=None, role_name=None, start_datetime=None, expiry_datetime=None):
@@ -4317,6 +4454,107 @@ class OrganisationUnit:
             return True
         except Exception as e:
             print("Database error; failed to update Organisation Unit: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class MenuItem:
+    def __init__(self, id=None, name=None):
+        self.id = id
+        self.name = name
+
+    @staticmethod
+    def get_all_menu_item_details():
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            # Fetch submitted reconciliations
+            query = """
+                        SELECT id, name FROM menu_item ORDER BY name;
+                    """
+            cursor.execute(query, )
+            result = cursor.fetchall()
+
+            # Convert query result into list of Reconciliation objects
+            menu_item_details = [
+                MenuItem(id=row.id, name=row.name)
+                for row in result
+            ]
+            return menu_item_details
+        except Exception as e:
+            print("Database error:", e)
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def menu_item_name_exists(menuItemName):
+        conn = get_db_connection()
+        if conn is None:
+            return False  # Assume doesn't exist if DB is unreachable
+
+        cursor = conn.cursor()
+
+        try:
+            query = "SELECT COUNT(*) FROM menu_item WHERE name = ?"
+            cursor.execute(query, (menuItemName,))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print("Database error; failed to check item menu name existence: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def insert_new_menu_item(menuItemName):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+
+            query = """
+                INSERT INTO menu_item (name)
+                VALUES (?)
+            """
+            cursor.execute(query, (menuItemName,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to insert a new menu item: ", e)
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_menu_item(edit_menu_item_id, menu_item_name):
+        conn = get_db_connection()
+        if conn is None:
+            return []  # Return empty list if the database connection fails
+
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                UPDATE menu_item SET name = ? WHERE id = ?
+            """
+            cursor.execute(query, (menu_item_name, edit_menu_item_id, ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print("Database error; failed to update menu item: ", e)
             return False
         finally:
             cursor.close()

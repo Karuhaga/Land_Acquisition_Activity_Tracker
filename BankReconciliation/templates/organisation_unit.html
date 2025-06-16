@@ -188,7 +188,6 @@
         // Check if organisation unit combination exists
         $.ajax({
             url: `/check-org-unit/${encodeURIComponent(formData.org_unit_name)}/${encodeURIComponent(formData.parent_unit_id)}/${encodeURIComponent(formData.org_unit_tier_id)}`,
-
             type: "GET",
             success: function (response) {
                 if (response.exists) {

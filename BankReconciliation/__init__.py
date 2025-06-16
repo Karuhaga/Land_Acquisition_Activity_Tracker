@@ -12,7 +12,7 @@ app.config['SECRET_KEY'] = '4f4726d4610186d9cedfd91b'
 
 # Uploading Files
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'static', 'uploads')  # Use absolute path
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'xls', 'xlsx'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'xls', 'xlsx', 'doc', 'docx'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Ensure folder exists
